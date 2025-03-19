@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Messenger</title>
+</head>
+<body>
+    {% extends "base.html" %}
+
+
+
+    {% block content %}
+        <header>
+            <h1>Мой мессенджер</h1>
+            <nav>
+                {% if user.is_authenticated %}
+                    <a href="{% url 'logout' %}">Выйти</a>
+                {% else %}
+                    <a href="{% url 'login' %}">Войти</a>
+                {% endif %}
+            </nav>
+        </header>
+        <a href="{% url 'register' %}">Регистрация</a>
+    {% endblock %}
+</body>
+</html>
