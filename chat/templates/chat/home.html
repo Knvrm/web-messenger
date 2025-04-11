@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Чаты </title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'chat/css/chat.css' %}">
+</head>
+<body>
+    {% block content %}
+    <div class="chat-container">
+        <!-- Боковая панель с чатами -->
+        <div class="chat-sidebar">
+            <div class="sidebar-header">
+                <h3>Мои чаты</h3>
+                <div class="header-actions">
+                    <a href="{% url 'logout' %}" class="logout-btn">Выйти</a>
+                </div>
+                <a href="{% url 'create-chat' %}" class="new-chat-btn">+ Новый чат</a>
+            </div>
+
+            <div class="chat-list">
+                {% for chat in chats %}
+                <a href="?chat_id={{ chat.id }}" class="chat-item {% if selected_chat.id == chat.id %}active{% endif %}">
+                    <div class="chat-avatar">
+                        {% if chat.type == 'DM' %}
+                            {% for member in chat.members.all %}
+                                {% if member != request.user %}
+                                    {{ member.username|first|upper }}
+                                {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            {{ chat.name|first|upper }}
+                        {% endif %}
+                    </div>
+                    <div class="chat-info">
+                        <h4>
+                            {% if chat.type == 'DM' %}
+                                {% for member in chat.members.all %}
+                                    {% if member != request.user %}{{ member.username }}{% endif %}
+                                {% endfor %}
+                            {% else %}
+                                {{ chat.name }}
+                            {% endif %}
+                        </h4>
+                        <p class="last-message">
+                            {% if chat.messages.last %}
+                                {{ chat.messages.last.content|truncatechars:25 }}
+                            {% else %}
+                                Нет сообщений
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="chat-meta">
+                        <span class="time">{{ chat.messages.last.timestamp|timesince }}</span>
+                        {% if chat.messages.last and not chat.messages.last.is_read and chat.messages.last.sender != request.user %}
+                            <span class="unread-badge"></span>
+                        {% endif %}
+                    </div>
+                </a>
+                {% empty %}
+                <div class="no-chats">У вас пока нет чатов</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Основное окно чата -->
+        <div class="chat-main">
+            {% if selected_chat %}
+            <div class="chat-header">
+                <h2>
+                    {% if selected_chat.type == 'DM' %}
+                        {% for member in selected_chat.members.all %}
+                            {% if member != request.user %}{{ member.username }}{% endif %}
+                        {% endfor %}
+                    {% else %}
+                        {{ selected_chat.name }}
+                    {% endif %}
+                </h2>
+            </div>
+
+            <div class="messages-container">
+                {% for message in messages %}
+                <div class="message {% if message.sender == request.user %}sent{% else %}received{% endif %}">
+                    <div class="message-content">
+                        {{ message.content }}
+                    </div>
+                    <div class="message-time">
+                        {{ message.timestamp|date:"H:i" }}
+                        {% if message.sender == request.user %}
+                            {% if message.is_read %}✓✓{% else %}✓{% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+                {% empty %}
+                <div class="empty-chat">
+                    <p>Начните общение!</p>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="message-input">
+                <form method="post" action="{% url 'send-message' selected_chat.id %}">
+                    {% csrf_token %}
+                    <input type="text" name="message" placeholder="Введите сообщение..." required>
+                    <button type="submit">Отправить</button>
+                </form>
+            </div>
+            {% else %}
+            <div class="chat-placeholder">
+                <div class="placeholder-content">
+                    <h3>Выберите чат</h3>
+                    <p>Выберите существующий чат или создайте новый</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

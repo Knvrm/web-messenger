@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Авторизация</title>
+</head>
+<body>
+    {% extends "accounts/base.html" %}
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<div class="container" style="margin-top:40px">
+    <div class="row">
+        <div class="col-sm-6 col-md-4 col-md-offset-4">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <strong> Авторизация </strong>
+                </div>
+                <div class="panel-body">
+
+                    <!-- Вывод ошибок (например, неправильный логин или пароль) -->
+                    {% if form.errors %}
+                        <div class="alert alert-danger">
+                            <ul>
+                                {% for error in form.non_field_errors %}
+                                    <li>{{ error }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+
+                    <form role="form" action="{% url 'login' %}" method="POST">{% csrf_token %}
+                        <fieldset>
+                            <div class="row">
+                                <div class="center-block">
+                                    <img class="profile-img"
+                                         src="http://bit.ly/2gSVBOy"
+                                         alt="" style="width: 96px; height: 96px; margin: 0 auto 10px;
+                                         display: block; border-radius: 50%;">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-sm-12 col-md-10 col-md-offset-1">
+                                    <div class="form-group">
+                                        <div class="input-group">
+                                            <span class="input-group-addon">
+                                                <i class="glyphicon glyphicon-user"></i>
+                                            </span>
+                                            <input class="form-control" placeholder="Username"
+                                                   name="username" type="text" autofocus
+                                                   value="{{ form.username.value|default_if_none:'' }}">
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <div class="input-group">
+                                            <span class="input-group-addon">
+                                                <i class="glyphicon glyphicon-lock"></i>
+                                            </span>
+                                            <input class="form-control" placeholder="Password"
+                                                   name="password" type="password">
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <button type="submit" class="btn btn-lg btn-primary btn-block">Войти</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </fieldset>
+                    </form>
+                </div>
+                <div class="panel-footer" style="padding: 1px 15px; color: #A0A0A0">
+                    У вас еще нет аккаунта? <a href="{% url 'register' %}"> Зарегистрироваться </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+</body>
+</html>

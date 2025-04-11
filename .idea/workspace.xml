@@ -5,21 +5,39 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="05bfa3c5-697f-4a1d-a1f0-6671be2519cc" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/Messenger.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/messenger/templates/base.html" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/messenger/templates/home.html" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/messenger/views.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/users/forms.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/users/templates/users/login.html" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/users/templates/users/logout.html" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/users/templates/users/register.html" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/users/urls.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/accounts/forms.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/accounts/templates/accounts/base.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/accounts/templates/accounts/login.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/accounts/templates/accounts/register.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/accounts/urls.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/chat/templates/chat/home.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/chat/urls.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/messenger/templates/messenger/home.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/static/chat/css/chat.css" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/home.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/templates/placeholder.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/Messenger.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/Messenger.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/db.sqlite3" beforeDir="false" afterPath="$PROJECT_DIR$/db.sqlite3" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/messenger/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/messenger/settings.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/messenger/templates/base.html" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/messenger/templates/home.html" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/messenger/urls.py" beforeDir="false" afterPath="$PROJECT_DIR$/messenger/urls.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/messenger/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/messenger/views.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/users/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/users/admin.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/users/apps.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/users/forms.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/users/migrations/0001_initial.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/users/migrations/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/users/models.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/users/templates/users/login.html" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/users/templates/users/logout.html" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/users/templates/users/register.html" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/users/tests.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/users/urls.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/users/views.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -37,9 +55,9 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 5
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 5
+}</component>
   <component name="ProjectId" id="2uVTl7yLJwzFLw4u7Dg0uzR1Ct5" />
   <component name="ProjectLevelVcsManager" settingsEditedManually="true">
     <ConfirmationsSetting value="2" id="Add" />
@@ -52,8 +70,8 @@
   "keyToString": {
     "DefaultHtmlFileTemplate": "HTML File",
     "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "master",
-    "last_opened_file_path": "C:/Users/Roman/Desktop/#1/Messenger/users/templates/users"
+    "git-widget-placeholder": "main",
+    "last_opened_file_path": "C:/Users/Roman/Desktop/#1/Messenger"
   }
 }]]></component>
   <component name="RecentsManager">
@@ -61,7 +79,11 @@
       <recent name="C:\Users\Roman\Desktop\#1\Messenger\users\templates\users" />
     </key>
     <key name="MoveFile.RECENT_KEYS">
-      <recent name="C:\Users\Roman\Desktop\#1\Messenger\users\templates\users" />
+      <recent name="C:\Users\Roman\Desktop\#1\Messenger\chat\templates\chat" />
+      <recent name="C:\Users\Roman\Desktop\#1\Messenger" />
+      <recent name="C:\Users\Roman\Desktop\#1\Messenger\messenger" />
+      <recent name="C:\Users\Roman\Desktop\#1\Messenger\accounts" />
+      <recent name="C:\Users\Roman\Desktop\#1\Messenger\accounts\templates\accounts" />
     </key>
   </component>
   <component name="SharedIndexes">
@@ -80,6 +102,30 @@
       <option name="presentableId" value="Default" />
       <updated>1742332890794</updated>
     </task>
+    <task id="LOCAL-00001" summary="Создан проект, добавлен простейший модуль регистрации и аутентификации">
+      <option name="closed" value="true" />
+      <created>1742417901463</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1742417901463</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="Создан проект, добавлен простейший модуль регистрации и аутентификации" />
+    <option name="LAST_COMMIT_MESSAGE" value="Создан проект, добавлен простейший модуль регистрации и аутентификации" />
   </component>
 </project>
