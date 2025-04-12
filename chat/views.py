@@ -1,16 +1,17 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Q
 from .models import ChatRoom, Message
 from django.contrib.auth import get_user_model
+import json
+from django.http import JsonResponse
+from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 User = get_user_model()
 
-
 @login_required
 def chat_home(request):
-    """Главная страница чатов"""
     user_chats = request.user.chat_rooms.all().order_by('-created_at')
 
     # Получаем выбранный чат (из GET-параметра)
@@ -30,52 +31,77 @@ def chat_home(request):
         'messages': chat_messages
     })
 
-
+@ensure_csrf_cookie
+@require_POST
 @login_required
 def create_chat(request):
-    if request.method == 'POST':
-        chat_type = request.POST.get('type', 'DM')
+    try:
+        # Парсим JSON данные из запроса
+        data = json.loads(request.body)
+        user_ids = data.get('users', [])
 
-        if chat_type == 'DM':
-            # Логика для личного чата
-            username = request.POST.get('username')
-            try:
-                other_user = User.objects.get(username=username)
+        # Проверяем, что выбраны пользователи
+        if not user_ids:
+            return JsonResponse({'status': 'error', 'message': 'No users selected'}, status=400)
 
-                # Проверяем, не существует ли уже такой чат
-                existing_chat = ChatRoom.objects.filter(
-                    type='DM',
-                    members=request.user
-                ).filter(members=other_user).first()
+        # Получаем объекты пользователей (исключая текущего)
+        users = User.objects.filter(id__in=user_ids).exclude(id=request.user.id)
 
-                if existing_chat:
-                    return redirect(f'/chat/?chat_id={existing_chat.id}')
+        # Проверяем существующий личный чат (если выбран 1 пользователь)
+        if users.count() == 1:
+            existing_chat = ChatRoom.objects.filter(
+                type='DM',
+                members=request.user
+            ).filter(members=users.first()).first()
 
-                # Создаем чат без названия (оно сгенерируется автоматически)
-                chat = ChatRoom.objects.create(type='DM')
-                chat.members.add(request.user, other_user)
-                messages.success(request, f'Чат с {other_user.username} создан')
-                return redirect(f'/chat/?chat_id={chat.id}')
+            if existing_chat:
+                return JsonResponse({
+                    'status': 'exists',
+                    'chat_id': existing_chat.id
+                })
 
-            except User.DoesNotExist:
-                messages.error(request, 'Пользователь не найден')
-                return redirect('chat-home')
+        # Создаем новый чат
+        new_chat = ChatRoom.objects.create()
+        new_chat.members.add(request.user, *users)
 
-        else:
-            # Логика для группового чата
-            group_name = request.POST.get('group_name', '').strip()
-            if not group_name:
-                messages.error(request, 'Укажите название группы')
-                return redirect('chat-home')
+        if new_chat.members.count() > 2:
+            new_chat.type = 'GM'
+            # Получаем имена всех участников (кроме текущего пользователя, если нужно)
+            member_names = list(users.values_list('username', flat=True))
+            # Добавляем текущего пользователя, если требуется
+            if request.user.username not in member_names:
+                member_names.insert(0, request.user.username)
+            # Формируем название чата
+            new_chat.name = ", ".join(member_names)
+            new_chat.save()
 
-            # Создаем групповой чат с указанным названием
-            chat = ChatRoom.objects.create(type='GM', name=group_name)
-            chat.members.add(request.user)
-            messages.success(request, f'Групповой чат "{group_name}" создан')
-            return redirect(f'/chat/?chat_id={chat.id}')
+        # Возвращаем успешный ответ
+        return JsonResponse({
+            'status': 'success',
+            'chat_id': new_chat.id,
+            'type': new_chat.type
+        })
 
-    return redirect('chat-home')
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
 
+@require_GET
+@login_required
+def get_users_for_chat(request):
+    try:
+        users = User.objects.exclude(id=request.user.id).values('id', 'username')
+        return JsonResponse({
+            'status': 'success',
+            'users': list(users)
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
 
 @login_required
 def send_message(request, room_id):
@@ -93,22 +119,9 @@ def send_message(request, room_id):
 
     return redirect(f'/chat/?chat_id={room_id}')
 
-
 @login_required
-def add_to_group(request, room_id):
-    """Добавление участника в групповой чат"""
-    chat = get_object_or_404(ChatRoom, id=room_id, type='GM', members=request.user)
-
-    if request.method == 'POST':
-        username = request.POST.get('username')
-        try:
-            user = User.objects.get(username=username)
-            if user not in chat.members.all():
-                chat.members.add(user)
-                messages.success(request, f'{username} добавлен в чат')
-            else:
-                messages.info(request, f'{username} уже в чате')
-        except User.DoesNotExist:
-            messages.error(request, 'Пользователь не найден')
-
-    return redirect(f'/chat/?chat_id={room_id}')
+def chat_settings(request):
+    return render(request, 'chat/settings.html', {
+        'title': 'Настройки чата',
+        'user': request.user
+    })
