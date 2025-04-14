@@ -7,4 +7,6 @@ urlpatterns = [
     path('get-users/', views.get_users_for_chat, name='get-users'),
     path('<int:room_id>/send/', views.send_message, name='send-message'),
     path('settings/', views.chat_settings, name='chat_settings'),
+    path('rename/<int:chat_id>/', views.rename_chat, name='rename-chat'),
+    path('<int:chat_id>/leave/', views.leave_chat, name='leave_chat'),
 ]

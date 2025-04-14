@@ -1,28 +1,35 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from django.contrib import messages
 from .models import ChatRoom, Message
 from django.contrib.auth import get_user_model
 import json
 from django.http import JsonResponse
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET, require_POST, require_http_methods
 from django.views.decorators.csrf import ensure_csrf_cookie
+from django.db.models import Prefetch, Q  # Добавляем импорт Max
+from django.urls import reverse
 
 User = get_user_model()
 
 @login_required
 def chat_home(request):
-    user_chats = request.user.chat_rooms.all().order_by('-created_at')
+    user_chats = request.user.chat_rooms.prefetch_related(
+        Prefetch('messages',
+                 queryset=Message.objects.order_by('-timestamp'),
+                 to_attr='last_message_list')
+    ).order_by('-created_at')
 
-    # Получаем выбранный чат (из GET-параметра)
+    for chat in user_chats:
+        chat.has_messages = len(chat.last_message_list) > 0
+        chat.last_message = chat.last_message_list[0] if chat.has_messages else None
+
     selected_chat = None
     chat_messages = []
-    if 'chat_id' in request.GET:
-        selected_chat = get_object_or_404(ChatRoom, id=request.GET['chat_id'], members=request.user)
-        chat_messages = selected_chat.messages.all().order_by('timestamp')
 
-    # Помечаем сообщения как прочитанные
-    if selected_chat:
+    if 'chat_id' in request.GET:
+        chat_id = request.GET['chat_id']
+        selected_chat = get_object_or_404(ChatRoom, id=chat_id, members=request.user)
+        chat_messages = selected_chat.messages.all().order_by('timestamp')
         selected_chat.messages.filter(is_read=False).exclude(sender=request.user).update(is_read=True)
 
     return render(request, 'chat/home.html', {
@@ -31,12 +38,31 @@ def chat_home(request):
         'messages': chat_messages
     })
 
+
+@login_required
+def rename_chat(request, chat_id):
+    if request.method == 'POST':
+        chat = get_object_or_404(ChatRoom, id=chat_id, members=request.user)
+        data = json.loads(request.body)
+        new_name = data.get('name', '').strip()
+
+        if not new_name:
+            return JsonResponse({'status': 'error', 'message': 'Название не может быть пустым'}, status=400)
+
+        if len(new_name) > 100:
+            return JsonResponse({'status': 'error', 'message': 'Название слишком длинное'}, status=400)
+
+        chat.name = new_name
+        chat.save()
+        return JsonResponse({'status': 'success'})
+
+    return JsonResponse({'status': 'error', 'message': 'Неверный метод запроса'}, status=405)
+
 @ensure_csrf_cookie
 @require_POST
 @login_required
 def create_chat(request):
     try:
-        # Парсим JSON данные из запроса
         data = json.loads(request.body)
         user_ids = data.get('users', [])
 
@@ -125,3 +151,46 @@ def chat_settings(request):
         'title': 'Настройки чата',
         'user': request.user
     })
+
+
+@login_required
+def leave_chat(request, chat_id):  # Используем chat_id для согласованности
+    if request.method == 'POST':
+        try:
+            room = ChatRoom.objects.get(id=chat_id)
+            user = request.user
+
+            if request.user not in room.members.all():
+                return JsonResponse(...)
+
+            # Проверяем, что пользователь участник чата
+            if user not in room.members.all():
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Вы не состоите в этом чате'
+                }, status=400)
+
+            # Удаляем пользователя из участников
+            room.members.remove(user)
+
+            return JsonResponse({
+                'success': True,
+                'message': 'Вы успешно покинули чат'
+            })
+
+        except ChatRoom.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'message': 'Чат не найден'
+            }, status=404)
+
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'message': f'Ошибка сервера: {str(e)}'
+            }, status=500)
+
+    return JsonResponse({
+        'success': False,
+        'message': 'Метод не разрешен'
+    }, status=405)

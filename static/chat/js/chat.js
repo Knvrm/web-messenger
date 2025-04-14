@@ -131,7 +131,285 @@ document.addEventListener('DOMContentLoaded', function() {
         showError(message) {
             alert(message);
         }
-    };
 
+    };
+    function updateMessageTimes() {
+        document.querySelectorAll('.message-time').forEach(el => {
+            // Логика для динамического обновления
+            // Например, "1 мин назад" → "2 мин назад"
+        });
+    }
+
+    const chatMenuBtn = document.getElementById('chatMenuBtn');
+    const chatDropdown = document.getElementById('chatDropdown');
+
+    if (chatMenuBtn && chatDropdown) {
+        // Обработчики для меню
+        chatMenuBtn.addEventListener('click', toggleChatMenu);
+
+        // Обработчики для пунктов меню
+        document.querySelectorAll('.rename-chat-btn').forEach(btn => {
+            btn.addEventListener('click', renameChat);
+        });
+
+        // Добавьте обработчики для других кнопок...
+    }
+
+    function toggleChatMenu(e) {
+        e.stopPropagation();
+        chatDropdown.classList.toggle('show');
+    }
+
+    function renameChat(e) {
+        e.preventDefault();
+
+        const chatHeader = document.querySelector('.chat-header');
+        if (!chatHeader) return;
+
+        const chatId = chatHeader.dataset.chatId;
+        const chatName = chatHeader.dataset.chatName;
+        const csrfToken = chatHeader.dataset.csrfToken;
+
+        const newName = prompt("Введите новое название чата:", chatName);
+        if (newName && newName !== chatName) {
+            fetch(`/chat/rename/${chatId}/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({name: newName})
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                }
+                throw new Error('Ошибка сервера');
+            })
+            .then(data => {
+                if (data.status === 'success') {
+                    location.reload(); // Обновляем страницу для отображения нового имени
+                } else {
+                    alert(data.message || 'Ошибка при переименовании');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Ошибка при переименовании чата');
+            });
+        }
+    }
+
+    // Закрытие меню при клике вне его
+    document.addEventListener('click', function() {
+        if (chatDropdown) chatDropdown.classList.remove('show');
+    });
+
+    // Обновлять каждую минуту
+    setInterval(updateMessageTimes, 60000);
     chatApp.init();
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+  // Инициализация меню чата
+  const menuBtn = document.getElementById('chatMenuBtn');
+  const dropdown = document.getElementById('chatDropdown');
+
+  if (menuBtn && dropdown) {
+    menuBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      dropdown.classList.toggle('show');
+    });
+
+    // Закрытие при клике вне меню
+    document.addEventListener('click', function() {
+      dropdown.classList.remove('show');
+    });
+
+    // Предотвращаем закрытие при клике внутри меню
+    dropdown.addEventListener('click', function(e) {
+      e.stopPropagation();
+    });
+  }
+
+  // Инициализация модального окна через Bootstrap
+  if (document.getElementById('chatInfoModal')) {
+    const modal = new bootstrap.Modal(document.getElementById('chatInfoModal'));
+
+    // Можно добавить дополнительные обработчики для модального окна
+    document.getElementById('chatInfoModal').addEventListener('shown.bs.modal', function() {
+      // Действия после открытия модалки
+      dropdown.classList.remove('show');
+    });
+  }
+
+
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+  const chatNameDisplay = document.getElementById('chatNameDisplay');
+  const editNameBtn = document.getElementById('editNameBtn');
+
+  if (chatNameDisplay && editNameBtn) {
+    let originalName = chatNameDisplay.textContent;
+    let currentInput = null;
+    let ignoreBlur = false; // Флаг для игнорирования blur после Enter
+
+    editNameBtn.addEventListener('click', function() {
+      if (currentInput) return;
+
+      startEditing();
+    });
+
+    function startEditing() {
+      currentInput = document.createElement('input');
+      currentInput.type = 'text';
+      currentInput.value = originalName;
+      currentInput.className = 'form-control form-control-sm d-inline-block w-auto text-center fs-4 border-0 border-bottom';
+      currentInput.style.maxWidth = '200px';
+
+      // Заменяем через родителя для надежности
+      chatNameDisplay.parentNode.replaceChild(currentInput, chatNameDisplay);
+      currentInput.focus();
+      currentInput.select();
+
+      // Обработчики
+      currentInput.addEventListener('blur', handleBlur);
+      currentInput.addEventListener('keydown', handleKeyDown);
+    }
+
+    function handleBlur(e) {
+      if (ignoreBlur) {
+        ignoreBlur = false;
+        return;
+      }
+
+      finishEditing(e.target.value.trim(), false);
+    }
+
+    function handleKeyDown(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        ignoreBlur = true; // Игнорируем последующий blur
+        finishEditing(e.target.value.trim(), true);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        ignoreBlur = true;
+        revertEditing();
+      }
+    }
+
+    function finishEditing(newName, fromEnter) {
+      if (!currentInput) return;
+
+      // Удаляем обработчики сразу
+      currentInput.removeEventListener('blur', handleBlur);
+      currentInput.removeEventListener('keydown', handleKeyDown);
+
+      if (newName && newName !== originalName) {
+        saveNewName(newName);
+      } else {
+        revertEditing();
+      }
+    }
+
+    function revertEditing() {
+      if (!currentInput || !currentInput.parentNode) return;
+
+      // Возвращаем оригинальный элемент
+      currentInput.parentNode.replaceChild(chatNameDisplay, currentInput);
+      currentInput = null;
+    }
+
+    function saveNewName(newName) {
+      const chatHeader = document.querySelector('.chat-header');
+      const chatId = chatHeader.dataset.chatId;
+      const csrfToken = chatHeader.dataset.csrfToken;
+
+      fetch(`/chat/rename/${chatId}/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({ name: newName })
+      })
+      .then(response => {
+        if (response.ok) {
+          chatNameDisplay.textContent = newName;
+          originalName = newName;
+        }
+      })
+      .catch(console.error)
+      .finally(() => {
+        if (currentInput && currentInput.parentNode) {
+          currentInput.parentNode.replaceChild(chatNameDisplay, currentInput);
+        }
+        currentInput = null;
+      });
+    }
+  }
+
+const leaveChatBtn = document.getElementById('leaveChatBtn');
+
+  if (leaveChatBtn) {
+    leaveChatBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (confirm('Вы уверены, что хотите покинуть этот чат?')) {
+        leaveChat();
+      }
+    });
+  }
+
+  async function leaveChat() {
+    const chatHeader = document.querySelector('.chat-header');
+    if (!chatHeader) {
+        throw new Error('Не найдена информация о чате');
+    }
+
+    // Используем data-chat-id как в вашем HTML
+    const chatId = chatHeader.dataset.chatId;
+    const csrfToken = chatHeader.dataset.csrfToken;
+
+    // Показываем индикатор загрузки
+    const leaveChatBtn = document.getElementById('leaveChatBtn');
+    const originalText = leaveChatBtn.innerHTML;
+    leaveChatBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Выход...';
+    leaveChatBtn.disabled = true;
+
+    try {
+        const response = await fetch(`/chat/${chatId}/leave/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            credentials: 'same-origin'
+        });
+
+        console.log('Ответ сервера получен', response);
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Данные ответа:', data);
+
+        if (data.success) {
+            window.location.href = '/chat/';
+        } else {
+            throw new Error(data.message || 'Не удалось покинуть чат');
+        }
+    } finally {
+        // Всегда восстанавливаем кнопку
+        if (leaveChatBtn) {
+            leaveChatBtn.innerHTML = originalText;
+            leaveChatBtn.disabled = false;
+        }
+    }
+  }
 });
