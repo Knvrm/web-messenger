@@ -5,18 +5,18 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="05bfa3c5-697f-4a1d-a1f0-6671be2519cc" name="Changes" comment="Создан проект, добавлен простейший модуль регистрации и аутентификации">
-      <change afterPath="$PROJECT_DIR$/chat/templatetags/chat_filters.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/templates/base.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/chat/consumers.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/accounts/templates/accounts/base.html" beforeDir="false" afterPath="$PROJECT_DIR$/accounts/templates/accounts/base.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/accounts/templates/accounts/login.html" beforeDir="false" afterPath="$PROJECT_DIR$/accounts/templates/accounts/login.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/accounts/templates/accounts/register.html" beforeDir="false" afterPath="$PROJECT_DIR$/accounts/templates/accounts/register.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/chat/admin.py" beforeDir="false" afterPath="$PROJECT_DIR$/chat/admin.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/chat/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/chat/models.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/chat/templates/chat/home.html" beforeDir="false" afterPath="$PROJECT_DIR$/chat/templates/chat/home.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/chat/templates/chat/settings.html" beforeDir="false" afterPath="$PROJECT_DIR$/chat/templates/chat/settings.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/chat/urls.py" beforeDir="false" afterPath="$PROJECT_DIR$/chat/urls.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/chat/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/chat/views.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/db.sqlite3" beforeDir="false" afterPath="$PROJECT_DIR$/db.sqlite3" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/messenger/asgi.py" beforeDir="false" afterPath="$PROJECT_DIR$/messenger/asgi.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/messenger/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/messenger/settings.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/messenger/urls.py" beforeDir="false" afterPath="$PROJECT_DIR$/messenger/urls.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/messenger/wsgi.py" beforeDir="false" afterPath="$PROJECT_DIR$/messenger/wsgi.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/static/chat/css/chat.css" beforeDir="false" afterPath="$PROJECT_DIR$/static/chat/css/chat.css" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/static/chat/js/chat.js" beforeDir="false" afterPath="$PROJECT_DIR$/static/chat/js/chat.js" afterDir="false" />
     </list>
@@ -28,8 +28,8 @@
   <component name="FileTemplateManagerImpl">
     <option name="RECENT_TEMPLATES">
       <list>
-        <option value="Python Script" />
         <option value="HTML File" />
+        <option value="Python Script" />
       </list>
     </option>
   </component>
@@ -60,11 +60,11 @@
       <recent name="C:\Users\Roman\Desktop\#1\Messenger\users\templates\users" />
     </key>
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\Roman\Desktop\#1\Messenger\" />
+      <recent name="C:\Users\Roman\Desktop\#1\Messenger\messenger" />
       <recent name="C:\Users\Roman\Desktop\#1\Messenger\static\favicon" />
       <recent name="C:\Users\Roman\Desktop\#1\Messenger\chat\templates\chat" />
       <recent name="C:\Users\Roman\Desktop\#1\Messenger" />
-      <recent name="C:\Users\Roman\Desktop\#1\Messenger\messenger" />
-      <recent name="C:\Users\Roman\Desktop\#1\Messenger\accounts" />
     </key>
   </component>
   <component name="SharedIndexes">

@@ -11,6 +11,7 @@ from django.urls import reverse
 
 User = get_user_model()
 
+
 @login_required
 def chat_home(request):
     user_chats = request.user.chat_rooms.prefetch_related(
@@ -25,24 +26,30 @@ def chat_home(request):
 
     selected_chat = None
     chat_messages = []
+    recipient = None  # Добавляем переменную для собеседника
 
     if 'chat_id' in request.GET:
         chat_id = request.GET['chat_id']
-        selected_chat = get_object_or_404(ChatRoom, id=chat_id, members=request.user)
+        selected_chat = get_object_or_404(ChatRoom, id=chat_id, participants=request.user)
         chat_messages = selected_chat.messages.all().order_by('timestamp')
         selected_chat.messages.filter(is_read=False).exclude(sender=request.user).update(is_read=True)
+
+        # Получаем собеседника для личных чатов
+        if selected_chat.type == 'DM' and selected_chat.participants.count() == 2:
+            recipient = selected_chat.participants.exclude(id=request.user.id).first()
 
     return render(request, 'chat/home.html', {
         'chats': user_chats,
         'selected_chat': selected_chat,
-        'messages': chat_messages
+        'messages': chat_messages,
+        'recipient': recipient  # Добавляем в контекст
     })
 
 
 @login_required
 def rename_chat(request, chat_id):
     if request.method == 'POST':
-        chat = get_object_or_404(ChatRoom, id=chat_id, members=request.user)
+        chat = get_object_or_404(ChatRoom, id=chat_id, participants=request.user)
         data = json.loads(request.body)
         new_name = data.get('name', '').strip()
 
@@ -77,8 +84,8 @@ def create_chat(request):
         if users.count() == 1:
             existing_chat = ChatRoom.objects.filter(
                 type='DM',
-                members=request.user
-            ).filter(members=users.first()).first()
+                participants=request.user
+            ).filter(participants=users.first()).first()
 
             if existing_chat:
                 return JsonResponse({
@@ -88,9 +95,9 @@ def create_chat(request):
 
         # Создаем новый чат
         new_chat = ChatRoom.objects.create()
-        new_chat.members.add(request.user, *users)
+        new_chat.participants.add(request.user, *users)
 
-        if new_chat.members.count() > 2:
+        if new_chat.participants.count() > 2:
             new_chat.type = 'GM'
             # Получаем имена всех участников (кроме текущего пользователя, если нужно)
             member_names = list(users.values_list('username', flat=True))
@@ -133,7 +140,7 @@ def get_users_for_chat(request):
 def send_message(request, room_id):
     """Отправка сообщения"""
     if request.method == 'POST':
-        chat = get_object_or_404(ChatRoom, id=room_id, members=request.user)
+        chat = get_object_or_404(ChatRoom, id=room_id, participants=request.user)
         message_text = request.POST.get('message', '').strip()
 
         if message_text:
@@ -160,18 +167,18 @@ def leave_chat(request, chat_id):  # Используем chat_id для сог�
             room = ChatRoom.objects.get(id=chat_id)
             user = request.user
 
-            if request.user not in room.members.all():
+            if request.user not in room.participants.all():
                 return JsonResponse(...)
 
             # Проверяем, что пользователь участник чата
-            if user not in room.members.all():
+            if user not in room.participants.all():
                 return JsonResponse({
                     'success': False,
                     'message': 'Вы не состоите в этом чате'
                 }, status=400)
 
             # Удаляем пользователя из участников
-            room.members.remove(user)
+            room.participants.remove(user)
 
             return JsonResponse({
                 'success': True,
@@ -194,3 +201,58 @@ def leave_chat(request, chat_id):  # Используем chat_id для сог�
         'success': False,
         'message': 'Метод не разрешен'
     }, status=405)
+
+@login_required
+@require_POST
+def remove_user_from_chat(request, chat_id):
+    try:
+
+        # Получаем данные из тела запроса
+        try:
+            data = json.loads(request.body.decode('utf-8'))
+            user_id = data.get('user_id')
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'message': 'Неверный формат данных'
+            }, status=400)
+
+        # Проверяем обязательные поля
+        if not user_id:
+            return JsonResponse({
+                'success': False,
+                'message': 'Не указан ID пользователя'
+            }, status=400)
+
+        # Получаем объекты
+        try:
+            chat = ChatRoom.objects.get(id=chat_id)
+            user_to_remove = User.objects.get(id=user_id)
+            current_user = request.user
+        except (ChatRoom.DoesNotExist, User.DoesNotExist) as e:
+            return JsonResponse({
+                'success': False,
+                'message': 'Чат или пользователь не найдены'
+            }, status=404)
+
+        # Нельзя исключить себя
+        if user_to_remove == current_user:
+            return JsonResponse({
+                'success': False,
+                'message': 'Вы не можете исключить себя'
+            }, status=400)
+
+        # Удаляем пользователя
+        chat.members.remove(user_to_remove)
+
+        return JsonResponse({
+            'success': True,
+            'message': 'Пользователь успешно исключен'
+        })
+
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'message': f'Ошибка сервера: {str(e)}'
+        }, status=500)
+

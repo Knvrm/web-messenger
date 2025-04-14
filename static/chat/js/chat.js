@@ -350,66 +350,240 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-const leaveChatBtn = document.getElementById('leaveChatBtn');
+    // Инициализация модального окна
+  const leaveChatModal = new bootstrap.Modal(document.getElementById('leaveChatModal'));
+  const confirmLeaveBtn = document.getElementById('confirmLeaveBtn');
+  const leaveChatBtn = document.getElementById('leaveChatBtn');
 
   if (leaveChatBtn) {
     leaveChatBtn.addEventListener('click', function(e) {
       e.preventDefault();
       e.stopPropagation();
 
-      if (confirm('Вы уверены, что хотите покинуть этот чат?')) {
-        leaveChat();
+      // Закрываем меню чата
+      const dropdown = document.querySelector('.dropdown-menu.show');
+      if (dropdown) dropdown.classList.remove('show');
+
+      // Показываем модальное окно вместо confirm()
+      leaveChatModal.show();
+    });
+  }
+
+  // Обработчик подтверждения выхода
+  if (confirmLeaveBtn) {
+    confirmLeaveBtn.addEventListener('click', async function() {
+      // Показываем индикатор загрузки
+      this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Выход...';
+      this.disabled = true;
+
+      try {
+        await leaveChat();
+        leaveChatModal.hide();
+      } catch (error) {
+        console.error('Error:', error);
+        alert('Ошибка при выходе из чата: ' + error.message);
+      } finally {
+        // Восстанавливаем кнопку
+        this.innerHTML = 'Покинуть чат';
+        this.disabled = false;
       }
     });
   }
 
+  // Функция для выхода из чата
   async function leaveChat() {
     const chatHeader = document.querySelector('.chat-header');
-    if (!chatHeader) {
-        throw new Error('Не найдена информация о чате');
-    }
-
-    // Используем data-chat-id как в вашем HTML
     const chatId = chatHeader.dataset.chatId;
     const csrfToken = chatHeader.dataset.csrfToken;
 
+    const response = await fetch(`/chat/${chatId}/leave/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      credentials: 'same-origin'
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Не удалось покинуть чат');
+    }
+
+    window.location.href = '/chat/';
+  }
+
+   const confirmRemoveModal = new bootstrap.Modal(document.getElementById('confirmRemoveModal'));
+   let currentUserIdToRemove = null;
+   let currentUsernameToRemove = null;
+
+  // Обработчик для кнопок исключения
+  document.querySelectorAll('.remove-user-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const userId = this.dataset.userId;
+      const username = this.closest('li').querySelector('div:not(.avatar-sm)').textContent.trim();
+
+      // Сохраняем данные для использования при подтверждении
+      currentUserIdToRemove = userId;
+      currentUsernameToRemove = username;
+
+      // Устанавливаем имя пользователя в модальное окно
+      document.getElementById('userToRemoveName').textContent = username;
+
+      // Показываем модальное окно
+      confirmRemoveModal.show();
+    });
+  });
+
+  // Обработчик подтверждения исключения
+  document.getElementById('confirmRemoveBtn').addEventListener('click', async function() {
+    if (!currentUserIdToRemove) return;
+
     // Показываем индикатор загрузки
-    const leaveChatBtn = document.getElementById('leaveChatBtn');
-    const originalText = leaveChatBtn.innerHTML;
-    leaveChatBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Выход...';
-    leaveChatBtn.disabled = true;
+    this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Исключение...';
+    this.disabled = true;
 
     try {
-        const response = await fetch(`/chat/${chatId}/leave/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken
-            },
-            credentials: 'same-origin'
-        });
+      const chatId = document.querySelector('.chat-header').dataset.chatId;
+      const csrfToken = document.querySelector('.chat-header').dataset.csrfToken;
 
-        console.log('Ответ сервера получен', response);
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        console.log('Данные ответа:', data);
-
-        if (data.success) {
-            window.location.href = '/chat/';
-        } else {
-            throw new Error(data.message || 'Не удалось покинуть чат');
-        }
+      await removeUserFromChat(chatId, currentUserIdToRemove, csrfToken);
+      confirmRemoveModal.hide();
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Ошибка при исключении пользователя: ' + error.message);
     } finally {
-        // Всегда восстанавливаем кнопку
-        if (leaveChatBtn) {
-            leaveChatBtn.innerHTML = originalText;
-            leaveChatBtn.disabled = false;
-        }
+      // Восстанавливаем кнопку
+      this.innerHTML = 'Исключить';
+      this.disabled = false;
+    }
+  });
+
+  // Функция для отправки запроса на сервер
+  async function removeUserFromChat(chatId, userId, csrfToken) {
+    try {
+      const response = await fetch(`/chat/${chatId}/remove_user/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({ user_id: userId }),
+        credentials: 'same-origin'
+      });
+
+      if (!response.ok) throw new Error('Ошибка сервера');
+
+      const data = await response.json();
+      if (data.success) {
+        // Обновляем список пользователей
+        location.reload(); // или более тонкое обновление через DOM
+      } else {
+        alert(data.message || 'Не удалось исключить пользователя');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Произошла ошибка: ' + error.message);
     }
   }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    const chatHeader = document.querySelector('.chat-header');
+    if (!chatHeader) return;
+
+    const chatId = chatHeader.dataset.chatId;
+    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const wsUrl = `${protocol}${window.location.host}/ws/chat/${chatId}/`;
+
+    const chatSocket = new WebSocket(wsUrl);
+    const messageForm = document.getElementById('message-form');
+    const messageInput = document.getElementById('message-input');
+
+    // Обработчики WebSocket
+    chatSocket.onopen = function() {
+        console.log('WebSocket connected');
+    };
+
+    chatSocket.onmessage = function(e) {
+        try {
+            const data = JSON.parse(e.data);
+            addMessageToChat(data, data.sender === '{{ request.user.username }}');
+        } catch (error) {
+            console.error('Error parsing message:', error);
+        }
+    };
+
+    chatSocket.onerror = function(error) {
+        console.error('WebSocket Error:', error);
+    };
+
+    chatSocket.onclose = function() {
+        console.log('WebSocket disconnected');
+        // Можно добавить переподключение здесь
+    };
+
+    // Обработка отправки формы
+    messageForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const message = messageInput.value.trim();
+
+        if (message && chatSocket.readyState === WebSocket.OPEN) {
+            chatSocket.send(JSON.stringify({
+                'message': message
+            }));
+            messageInput.value = '';
+        }
+    });
+
+    function addMessageToChat(data, isCurrentUser) {
+        const messageClass = isCurrentUser ? 'sent' : 'received';
+        const chatType = chatHeader.dataset.chatType;
+
+        const messageElement = `
+            <div class="message-row ${messageClass}">
+                ${!isCurrentUser && chatType === 'GM' ? `
+                <div class="message-avatar">
+                    <div class="user-avatar">
+                        ${data.sender.charAt(0).toUpperCase()}
+                    </div>
+                </div>
+                ` : ''}
+
+                <div class="message-block">
+                    <div class="message-bubble">
+                        ${!isCurrentUser && chatType === 'GM' ? `
+                        <div class="message-username">
+                            ${data.sender}
+                        </div>
+                        ` : ''}
+
+                        <div class="message-text">
+                            ${data.message}
+                        </div>
+
+                        <div class="message-meta">
+                            <span class="message-time">
+                                ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            </span>
+                            ${isCurrentUser ? `
+                            <span class="read-status">
+                                ✓${data.is_read ? '✓' : ''}
+                            </span>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const container = document.querySelector('.messages-container');
+        container.insertAdjacentHTML('beforeend', messageElement);
+        container.scrollTop = container.scrollHeight;
+    }
 });

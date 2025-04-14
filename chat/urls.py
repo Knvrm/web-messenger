@@ -9,4 +9,5 @@ urlpatterns = [
     path('settings/', views.chat_settings, name='chat_settings'),
     path('rename/<int:chat_id>/', views.rename_chat, name='rename-chat'),
     path('<int:chat_id>/leave/', views.leave_chat, name='leave_chat'),
+    path('<int:chat_id>/remove_user/', views.remove_user_from_chat, name='remove_user_from_chat'),
 ]
