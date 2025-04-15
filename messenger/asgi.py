@@ -1,17 +1,15 @@
 import os
 import django
 from django.core.asgi import get_asgi_application
+from channels.routing import ProtocolTypeRouter, URLRouter
+from channels.auth import AuthMiddlewareStack
+from django.urls import path
 
 # Установка переменной окружения ПЕРВОЙ строкой
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'messenger.settings')
 
 # Инициализация Django ДО импорта любых моделей
 django.setup()
-
-# Теперь безопасно импортируем компоненты Channels
-from channels.routing import ProtocolTypeRouter, URLRouter
-from channels.auth import AuthMiddlewareStack
-from django.urls import path
 
 # Получаем стандартное Django приложение
 django_application = get_asgi_application()

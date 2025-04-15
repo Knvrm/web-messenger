@@ -11,9 +11,10 @@ urlpatterns = [
     path("", home, name="home"),
     path("placeholder/", placeholder, name="placeholder"),
     path("accounts/", include("accounts.urls")),
-    path("logout/", logout_view, name="logout"),  # Выход
+    path("logout/", logout_view, name="logout"),
     path('chat/', include('chat.urls')),
     path('favicon.ico', RedirectView.as_view(url=staticfiles_storage.url('img/favicon.ico'))),
+    path('auth/', include('allauth.urls')),
 ]
 
 urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
