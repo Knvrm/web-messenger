@@ -5,17 +5,24 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="05bfa3c5-697f-4a1d-a1f0-6671be2519cc" name="Changes" comment="Создан проект, добавлен простейший модуль регистрации и аутентификации">
-      <change afterPath="$PROJECT_DIR$/.env" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/messenger/classif.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/messenger/domen.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/messenger/link.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/messenger/textanalysis.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/accounts/signals.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/messenger/test_email.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/static/accounts/css/register.css" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/static/accounts/js/register.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/db.sqlite3" beforeDir="false" afterPath="$PROJECT_DIR$/db.sqlite3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/messenger/asgi.py" beforeDir="false" afterPath="$PROJECT_DIR$/messenger/asgi.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/accounts/admin.py" beforeDir="false" afterPath="$PROJECT_DIR$/accounts/admin.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/accounts/apps.py" beforeDir="false" afterPath="$PROJECT_DIR$/accounts/apps.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/accounts/forms.py" beforeDir="false" afterPath="$PROJECT_DIR$/accounts/forms.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/accounts/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/accounts/models.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/accounts/templates/accounts/base.html" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/accounts/templates/accounts/login.html" beforeDir="false" afterPath="$PROJECT_DIR$/accounts/templates/accounts/login.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/accounts/templates/accounts/register.html" beforeDir="false" afterPath="$PROJECT_DIR$/accounts/templates/accounts/register.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/accounts/urls.py" beforeDir="false" afterPath="$PROJECT_DIR$/accounts/urls.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/accounts/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/accounts/views.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/messenger/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/messenger/settings.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/messenger/urls.py" beforeDir="false" afterPath="$PROJECT_DIR$/messenger/urls.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/staticfiles/chat/js/chat.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/staticfiles/chat/js/sidebar.js" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -44,25 +51,27 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;DefaultHtmlFileTemplate&quot;: &quot;HTML File&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;last_opened_file_path&quot;: &quot;C:/Users/Roman/Desktop/#1/Messenger/messenger&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "DefaultHtmlFileTemplate": "HTML File",
+    "Python.settings.executor": "Run",
+    "Python.test_email.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "git-widget-placeholder": "main",
+    "last_opened_file_path": "C:/Users/Roman/Desktop/#1/Messenger/messenger"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="C:\Users\Roman\Desktop\#1\Messenger\messenger" />
       <recent name="C:\Users\Roman\Desktop\#1\Messenger\users\templates\users" />
     </key>
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\Roman\Desktop\#1\Messenger\static\accounts\js" />
+      <recent name="C:\Users\Roman\Desktop\#1\Messenger\static\accounts" />
+      <recent name="C:\Users\Roman\Desktop\#1\Messenger\accounts\templates\static\accounts" />
       <recent name="C:\Users\Roman\Desktop\#1\Messenger" />
-      <recent name="C:\Users\Roman\Desktop\#1\Messenger\" />
       <recent name="C:\Users\Roman\Desktop\#1\Messenger\messenger" />
-      <recent name="C:\Users\Roman\Desktop\#1\Messenger\static\favicon" />
-      <recent name="C:\Users\Roman\Desktop\#1\Messenger\chat\templates\chat" />
     </key>
   </component>
   <component name="SharedIndexes">
@@ -91,6 +100,9 @@
     </task>
     <option name="localTasksCounter" value="2" />
     <servers />
+  </component>
+  <component name="UnknownFeatures">
+    <option featureType="com.intellij.fileTypeFactory" implementationName=".env" />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
     <option name="TAB_STATES">

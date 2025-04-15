@@ -1,0 +1,75 @@
+.registration-container {
+    max-width: 500px;
+    margin: 60px auto;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+}
+.form-label {
+    font-weight: 500;
+    margin-bottom: 5px;
+}
+.form-control {
+    padding: 10px;
+    margin-bottom: 15px;
+}
+.btn-primary {
+    background-color: #5bc0de;
+    border-color: #5bc0de;
+    padding: 10px;
+    font-weight: 500;
+}
+.btn-primary:hover {
+    background-color: #31b0d5;
+    border-color: #31b0d5;
+}
+.resend-code-container {
+    font-size: 0.9rem;
+    color: #666;
+}
+
+#resend-code-link {
+    color: #007bff;
+    text-decoration: none;
+    transition: opacity 0.2s;
+}
+
+#resend-code-link:hover {
+    text-decoration: underline;
+    opacity: 0.8;
+}
+
+#countdown {
+    font-weight: bold;
+    color: #dc3545;
+}
+.registration-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #eee;
+}
+
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #007bff;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.back-link:hover {
+    color: #0056b3;
+}
+
+.back-link svg {
+    width: 1.2rem;
+    height: 1.2rem;
+}
+
+.registration-header h2 {
+    flex-grow: 1;
+    margin-right: 2rem; /* Компенсируем ширину кнопки назад */
+}
