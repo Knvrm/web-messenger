@@ -134,12 +134,12 @@ LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "chat-home"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
 
-ASGI_APPLICATION = "messenger.asgi.application"  # Указывает на asgi.py
+ASGI_APPLICATION = "messenger.asgi.application"
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [("127.0.0.1", 6380)],  # Вот здесь указывается порт
+            "hosts": [("127.0.0.1", 6380)],
             "channel_capacity": {
                 "http.request": 200,
                 "http.response!*": 200,
@@ -159,3 +159,5 @@ EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL')
+
+VIRUSTOTAL_API_KEY = os.getenv('VIRUSTOTAL_API_KEY')

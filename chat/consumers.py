@@ -1,11 +1,13 @@
-# chat/consumers.py
+import asyncio
 import json
+import re
+import time
+
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
+from .link import validate_url
 from .models import ChatRoom, Message
-from django.contrib.auth import get_user_model
-
-User = get_user_model()
+from .textanalysis import PhishingDetector
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
@@ -30,42 +32,117 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.send_history()
 
     async def receive(self, text_data):
-        data = json.loads(text_data)
-        message = data['message']
+        try:
+            data = json.loads(text_data)
+            message = data['message'].strip()  # Удаляем лишние пробелы
+            user = self.scope['user']
+            print(message)
+            if not message:
+                await self.send_error("Сообщение не может быть пустым")
+                return
 
-        # Сохраняем сообщение в БД
-        message_obj = await self.save_message(self.user, message)
-
-        # Для личных чатов отправляем только получателю
-        if self.is_dm:
-            recipient = await self.get_recipient()
-            if recipient:
-                await self.channel_layer.group_send(
-                    self.room_group_name,
-                    {
-                        'type': 'chat_message',
-                        'message': message_obj.content,
-                        'sender': self.user.username,
-                        'sender_id': self.user.id,
-                        'timestamp': message_obj.timestamp.isoformat(),
-                        'message_id': message_obj.id,
-                        'exclude_sender': True  # Исключаем отправителя
-                    }
+            detector = PhishingDetector()
+            # 1. Проверка текста ML-моделью (асинхронно с таймаутом)
+            try:
+                loop = asyncio.get_running_loop()
+                ml_result = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: detector.analyze_text(message)  # Обернули в lambda для безопасности
+                    ),
+                    timeout=3.0  # Таймаут для ML-анализа
                 )
-        else:
-            # Для групповых чатов отправляем всем
-            await self.channel_layer.group_send(
-                self.room_group_name,
-                {
-                    'type': 'chat_message',
-                    'message': message_obj.content,
-                    'sender': self.user.username,
-                    'sender_id': self.user.id,
-                    'timestamp': message_obj.timestamp.isoformat(),
-                    'message_id': message_obj.id,
-                    'exclude_sender': True  # Исключаем отправителя
-                }
-            )
+
+                if ml_result.get('is_phishing', False) and ml_result.get('confidence', 0) > 0.7:
+                    await self.send_security_alert(
+                        "Сообщение содержит признаки фишинга",
+                        ml_result,
+                        alert_type="phishing"
+                    )
+                    print('123')
+                    return
+
+            except asyncio.TimeoutError:
+                print("ML анализ превысил таймаут, продолжаем базовые проверки")
+            except Exception as e:
+                print(f"Ошибка ML анализа: {str(e)}")
+
+            # 2. Проверка URL (параллельно для всех URL)
+            urls = re.findall(r'https?://[^\s<>"]+|www\.[^\s<>"]+', message)
+            if urls:
+                try:
+                    # Параллельная проверка всех URL
+                    loop = asyncio.get_running_loop()
+                    url_checks = await asyncio.gather(*[
+                        loop.run_in_executor(
+                            None,
+                            lambda url=url: validate_url(url)  # Замыкание для каждой URL
+                        )
+                        for url in urls
+                    ], return_exceptions=True)
+
+                    for url, check_result in zip(urls, url_checks):
+                        if isinstance(check_result, Exception):
+                            await self.send_security_alert(
+                                "Обнаружена подозрительная ссылка",
+                                {
+                                    "url": url,
+                                    "error": str(check_result)
+                                },
+                                alert_type="malicious_url"
+                            )
+                            return
+
+                except Exception as e:
+                    print(f"Ошибка проверки URL: {str(e)}")
+                    await self.send_security_alert(
+                        "Не удалось проверить ссылки в сообщении",
+                        {"error": str(e)},
+                        alert_type="url_check_error"
+                    )
+                    return
+
+            # 3. Если проверки пройдены - сохраняем и отправляем
+            message_obj = await self.save_message(user, message)
+            await self.send_message_to_chat(message_obj)
+
+        except json.JSONDecodeError:
+            await self.send_error("Неверный формат сообщения (ожидается JSON)")
+        except KeyError:
+            await self.send_error("Отсутствует обязательное поле 'message'")
+        except Exception as e:
+            await self.send_error("Внутренняя ошибка обработки сообщения")
+            #print(f"Chat error: {str(e)}", exc_info=True)  # Логируем с traceback
+
+    async def send_security_alert(self, message, details=None, alert_type="security"):
+        """Отправка security alert клиенту с дополнительными метаданными"""
+        await self.send(text_data=json.dumps({
+            'type': 'security_alert',
+            'alert_type': alert_type,
+            'message': message,
+            'details': details or {},
+            'timestamp': int(time.time())
+        }))
+
+    async def send_error(self, error_msg, details=None):
+        """Отправка ошибки клиенту"""
+        await self.send(text_data=json.dumps({
+            'type': 'error',
+            'error': error_msg,
+            'details': details or {}
+        }))
+
+    async def send_message_to_chat(self, message_obj):
+        """Отправка сообщения в чат"""
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'chat.message',
+                'message': message_obj.content,
+                'sender': message_obj.user.username,
+                'timestamp': message_obj.timestamp.isoformat()
+            }
+        )
 
     async def chat_message(self, event):
         # Проверяем, нужно ли исключить этого пользователя

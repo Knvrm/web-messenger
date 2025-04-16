@@ -11,7 +11,6 @@ from django.urls import reverse
 
 User = get_user_model()
 
-
 @login_required
 def chat_home(request):
     user_chats = request.user.chat_rooms.prefetch_related(

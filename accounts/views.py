@@ -1,8 +1,9 @@
 import json
-from django.contrib.auth import login, authenticate, logout, get_user_model
+from django.contrib.auth import login, authenticate, logout
 from django.db import transaction
 from django.http import JsonResponse
 from django.contrib import messages
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_POST
@@ -14,11 +15,11 @@ import random
 import string
 from datetime import datetime, timedelta
 
+
 from .models import EmailConfirmation, CustomUser
 
 def generate_confirmation_code():
     return ''.join(random.choices(string.digits, k=6))
-
 
 def register_view(request):
     CustomUser.objects.filter(
@@ -29,6 +30,7 @@ def register_view(request):
         form = RegistrationForm(request.POST)
         if form.is_valid():
             try:
+
                 # Удаляем предыдущие незавершенные регистрации для этого email
                 CustomUser.objects.filter(
                     email=form.cleaned_data['email'],
@@ -76,7 +78,6 @@ def register_view(request):
         if not user_id:
             messages.error(request, 'Сессия регистрации истекла. Начните заново.')
             return redirect('register')
-
         try:
             with transaction.atomic():
                 user = CustomUser.objects.get(pk=user_id, is_active=False)
@@ -203,21 +204,73 @@ def resend_confirmation_code(request):
             'error': 'Произошла ошибка при обработке запроса'
         }, status=500)
 
+
 def login_view(request):
     if request.method == "POST":
         form = LoginForm(data=request.POST)
         if form.is_valid():
-            username = form.cleaned_data["username"]
-            password = form.cleaned_data["password"]
-            user = authenticate(request, username=username, password=password)
-            if user:
-                login(request, user)
-                return redirect("chat-home")
-            else:
-                form.add_error(None, "Неверное имя пользователя или пароль")
-    else:
-        form = LoginForm()
-    return render(request, "accounts/login.html", {"form": form})
+            user = form.get_user()
+
+            # Генерируем и отправляем код
+            auth_code = generate_confirmation_code()
+            request.session['auth_user_id'] = user.id
+            request.session['auth_code'] = auth_code
+            request.session.set_expiry(300)  # 5 минут на ввод кода
+
+            send_mail(
+                'Код подтверждения входа',
+                f'Ваш код подтверждения: {auth_code}',
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                fail_silently=False,
+            )
+
+            return JsonResponse({
+                'status': 'code_required',
+                'message': 'Код отправлен на вашу почту'
+            })
+
+        return JsonResponse({
+            'status': 'error',
+            'errors': form.errors.as_json()
+        }, status=400)
+
+    return render(request, "accounts/login.html", {"form": LoginForm()})
+
+
+def verify_auth_code(request):
+    if request.method == "POST":
+        entered_code = request.POST.get('code', '')
+        csrf_token = request.POST.get('csrfmiddlewaretoken', '')
+        user_id = request.session.get('auth_user_id')
+        stored_code = request.session.get('auth_code')
+
+        if not entered_code or not csrf_token:
+            return JsonResponse({'status': 'error', 'message': 'Неверный код или токен'}, status=400)
+
+        if not user_id or not stored_code:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Сессия истекла'
+            }, status=400)
+
+        if entered_code == stored_code:
+            user = CustomUser.objects.get(id=user_id)
+            login(request, user)
+
+            # Очищаем сессию
+            del request.session['auth_user_id']
+            del request.session['auth_code']
+
+            return JsonResponse({
+                'status': 'success',
+                'redirect': reverse('chat-home')
+            })
+
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Неверный код подтверждения'
+        }, status=400)
 
 def logout_view(request):
     logout(request)

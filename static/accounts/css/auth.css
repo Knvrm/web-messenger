@@ -1,0 +1,61 @@
+/* static/css/auth.css */
+
+.auth-code-input {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.auth-code-input input {
+    width: 40px;
+    height: 50px;
+    font-size: 1.5rem;
+    text-align: center;
+}
+
+#authModal .modal-dialog {
+    max-width: 400px;
+}
+
+#timerText {
+    font-size: 0.9rem;
+}
+
+#countdown {
+    font-weight: bold;
+    color: #dc3545;
+}
+
+#alert-box {
+    transition: opacity 0.3s ease;
+}
+
+.auth-code-input {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.auth-code-input input[type="text"] {
+  width: 50px;
+  height: 50px;
+  font-size: 24px;
+  text-align: center;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+}
+
+.auth-code-input input[type="text"]:focus {
+  border-color: #007bff;
+  box-shadow: 0 0 0 3px rgba(0,123,255,0.25);
+  outline: none;
+}
+
+#timerText {
+  font-size: 1.5rem;
+  margin-top: 5px;
+}
+
+#resendCodeBtn {
+  font-size: 1.5rem;
+}
