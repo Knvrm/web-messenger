@@ -17,7 +17,7 @@ SECRET_KEY = 'django-insecure-u_93f06eu@k765#_gy^9l2a$k_5-71=wv-i&gpc3nr3vpmu30_
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['mymessenger.local', '127.0.0.1', 'localhost']
 
 # Application definition
 
@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
+    'sslserver',
     'accounts',
 
     'crispy_forms',
@@ -136,28 +137,31 @@ LOGOUT_REDIRECT_URL = "/accounts/login/"
 
 ASGI_APPLICATION = "messenger.asgi.application"
 CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [("127.0.0.1", 6380)],
-            "channel_capacity": {
-                "http.request": 200,
-                "http.response!*": 200,
-                "websocket.*": 1000,
-            },
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [('127.0.0.1', 6380)],
         },
     },
 }
+
 AUTHENTICATION_BACKENDS = [
-    'django.contrib.auth.backends.ModelBackend',  # Оставляем только этот бэкенд
+    'django.contrib.auth.backends.ModelBackend',
 ]
 
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND')
 EMAIL_HOST = os.getenv('EMAIL_HOST')
-EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))  # Преобразуем в число
-EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
+EMAIL_PORT = int(os.getenv('EMAIL_PORT'))
+EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'True').lower() == 'true'
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL')
 
 VIRUSTOTAL_API_KEY = os.getenv('VIRUSTOTAL_API_KEY')
+
+SECURE_SSL_REDIRECT = False
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+
+CSRF_COOKIE_HTTPONLY = False  # Для доступа JavaScript к CSRF-токену
+CSRF_TRUSTED_ORIGINS = ['https://mymessenger.local:8443']

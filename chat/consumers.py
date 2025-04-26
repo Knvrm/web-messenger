@@ -53,14 +53,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     timeout=3.0  # Таймаут для ML-анализа
                 )
 
-                if ml_result.get('is_phishing', False) and ml_result.get('confidence', 0) > 0.7:
-                    await self.send_security_alert(
-                        "Сообщение содержит признаки фишинга",
-                        ml_result,
-                        alert_type="phishing"
-                    )
-                    print('123')
-                    return
+                # if ml_result.get('is_phishing', False) and ml_result.get('confidence', 0) > 0.7:
+                #     await self.send_security_alert(
+                #         "Сообщение содержит признаки фишинга",
+                #         ml_result,
+                #         alert_type="phishing"
+                #     )
+                #     print('123')
+                #     return
 
             except asyncio.TimeoutError:
                 print("ML анализ превысил таймаут, продолжаем базовые проверки")

@@ -499,7 +499,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const chatId = chatHeader.dataset.chatId;
     const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    const wsUrl = `${protocol}${window.location.host}/ws/chat/${chatId}/`;
+    const wsUrl = `${protocol}mymessenger.local:8444/ws/chat/${chatId}/`;
 
     const chatSocket = new WebSocket(wsUrl);
     const messageForm = document.getElementById('message-form');

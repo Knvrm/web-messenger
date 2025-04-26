@@ -15,7 +15,6 @@ import random
 import string
 from datetime import datetime, timedelta
 
-
 from .models import EmailConfirmation, CustomUser
 
 def generate_confirmation_code():
@@ -30,21 +29,16 @@ def register_view(request):
         form = RegistrationForm(request.POST)
         if form.is_valid():
             try:
-
-                # Удаляем предыдущие незавершенные регистрации для этого email
                 CustomUser.objects.filter(
                     email=form.cleaned_data['email'],
                     is_active=False
                 ).delete()
-
                 with transaction.atomic():
                     user = form.save(commit=False)
                     user.is_active = False
                     user.save()
-
                     code = EmailConfirmation.generate_code()
                     EmailConfirmation.objects.create(user=user, code=code)
-
                     send_mail(
                         'Код подтверждения регистрации',
                         f'Ваш код подтверждения: {code}\nКод действителен 15 минут.',
@@ -52,27 +46,20 @@ def register_view(request):
                         [user.email],
                         fail_silently=False,
                     )
-
-                    # Сохраняем в сессии только ID пользователя (не email)
                     request.session['registration_user_id'] = user.id
-                    request.session.set_expiry(1800)  # 30 минут на подтверждение
-
+                    request.session.set_expiry(1800)
                     return render(request, 'accounts/register.html', {
                         'code_sent': True,
-                        'email': user.email,  # Только для отображения
+                        'email': user.email,
                         'form': RegistrationForm()
                     })
-
             except Exception as e:
                 messages.error(request, 'Ошибка регистрации. Попробуйте позже.')
                 return redirect('register')
-
         return render(request, 'accounts/register.html', {
             'form': form,
             'code_sent': False
         })
-
-    # Обработка подтверждения кода
     elif request.method == "POST" and 'verify' in request.POST:
         user_id = request.session.get('registration_user_id')
         if not user_id:
@@ -85,7 +72,6 @@ def register_view(request):
                     user=user,
                     is_used=False
                 ).latest('created_at')
-
                 entered_code = request.POST.get('confirmation_code', '').strip()
                 if not entered_code:
                     messages.error(request, 'Введите код подтверждения')
@@ -94,45 +80,34 @@ def register_view(request):
                         'email': CustomUser.objects.get(pk=user_id).email,
                         'form': RegistrationForm()
                     })
-
                 if confirmation.code != entered_code:
                     messages.error(request, 'Неверный код подтверждения')
                 elif confirmation.is_expired():
                     messages.error(request, 'Срок действия кода истёк. Начните регистрацию заново.')
-                    # Удаляем просроченную регистрацию
                     user.delete()
                     del request.session['registration_user_id']
                 else:
-                    # Финальное подтверждение
                     user.is_active = True
                     user.save()
                     confirmation.is_used = True
                     confirmation.save()
-
-                    # Очистка сессии
                     del request.session['registration_user_id']
-
                     messages.success(request, 'Регистрация завершена! Можете войти.')
                     return redirect('login')
-
         except CustomUser.DoesNotExist:
             del request.session['registration_user_id']
             messages.error(request, 'Сессия истекла')
             return redirect('register')
-
-    # GET запрос
     else:
         user_id = request.session.get('registration_user_id')
         if user_id:
             try:
                 user = CustomUser.objects.get(pk=user_id, is_active=False)
-                # Проверяем, не истекла ли сессия
                 if user.date_joined < timezone.now() - timedelta(minutes=30):
                     user.delete()
                     del request.session['registration_user_id']
                     messages.info(request, 'Сессия регистрации истекла.')
                     return redirect('register')
-
                 return render(request, 'accounts/register.html', {
                     'code_sent': True,
                     'email': user.email,
@@ -140,7 +115,6 @@ def register_view(request):
                 })
             except CustomUser.DoesNotExist:
                 del request.session['registration_user_id']
-
         return render(request, 'accounts/register.html', {'form': RegistrationForm()})
 
 @require_POST
@@ -207,36 +181,31 @@ def resend_confirmation_code(request):
 
 def login_view(request):
     if request.method == "POST":
+        print(f"Received POST data: {request.POST}")  # Логируем данные
         form = LoginForm(data=request.POST)
         if form.is_valid():
             user = form.get_user()
-
-            # Генерируем и отправляем код
             auth_code = generate_confirmation_code()
             request.session['auth_user_id'] = user.id
             request.session['auth_code'] = auth_code
-            request.session.set_expiry(300)  # 5 минут на ввод кода
-
+            request.session.set_expiry(300)
             send_mail(
                 'Код подтверждения входа',
-                f'Ваш код подтверждения: {auth_code}',
+                f'Никому не сообщайте данный код.\nВаш код подтверждения: {auth_code}\nЕго спрашивают ТОЛЬКО мошенники.',
                 settings.DEFAULT_FROM_EMAIL,
                 [user.email],
                 fail_silently=False,
             )
-
             return JsonResponse({
                 'status': 'code_required',
                 'message': 'Код отправлен на вашу почту'
             })
-
+        print(f"Form errors: {form.errors.as_json()}")  # Логируем ошибки формы
         return JsonResponse({
             'status': 'error',
             'errors': form.errors.as_json()
         }, status=400)
-
     return render(request, "accounts/login.html", {"form": LoginForm()})
-
 
 def verify_auth_code(request):
     if request.method == "POST":

@@ -1,12 +1,30 @@
 $(document).ready(function() {
+    // Функция для получения CSRF-токена из куки
+    function getCsrfToken() {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, 10) === 'csrftoken=') {
+                    cookieValue = decodeURIComponent(cookie.substring(10));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
     // Обработка основной формы входа
     $('#loginForm').on('submit', function(e) {
         e.preventDefault();
+        const formData = $(this).serializeArray();
+        formData.push({ name: 'csrfmiddlewaretoken', value: getCsrfToken() });
 
         $.ajax({
             url: $(this).attr('action'),
             type: 'POST',
-            data: $(this).serialize(),
+            data: formData,
             success: function(response) {
                 if (response.status === 'code_required') {
                     $('#authModal').modal('show');
@@ -16,8 +34,10 @@ $(document).ready(function() {
                 }
             },
             error: function(xhr) {
-                const errors = xhr.responseJSON.errors;
-                // Показать ошибки в форме
+                console.log('Error response:', xhr.responseText); // Логируем ответ сервера
+                const response = xhr.responseJSON || {};
+                const errors = response.errors ? JSON.parse(response.errors) : { message: 'Произошла ошибка.' };
+                showAlert(errors.email || errors.password || errors.message || 'Ошибка входа.', 'danger');
             }
         });
     });
@@ -43,17 +63,17 @@ $(document).ready(function() {
             enteredCode += $(this).val();
         });
 
-        console.log(enteredCode);
         if (enteredCode.length !== 6) {
+            showAlert('Пожалуйста, введите полный код.', 'danger');
             return;
         }
 
         $.ajax({
-            url: verifyAuthUrl,
+            url: verifyAuthUrl, // Убедитесь, что verifyAuthUrl определён
             type: 'POST',
             data: {
                 code: enteredCode,
-                csrfmiddlewaretoken: $('input[name="csrfmiddlewaretoken"]').val()
+                csrfmiddlewaretoken: getCsrfToken()
             },
             success: function(response) {
                 if (response.status === 'success') {
@@ -65,13 +85,9 @@ $(document).ready(function() {
             error: function(xhr) {
                 try {
                     const response = JSON.parse(xhr.responseText);
-                    if (response.message) {
-                        showAlert(response.message, 'danger');  // Покажи красивую ошибку
-                    } else {
-                        showAlert("Произошла ошибка. Повторите попытку позже.", 'danger');
-                    }
+                    showAlert(response.message || 'Произошла ошибка.', 'danger');
                 } catch (e) {
-                    showAlert("Не удалось обработать ответ сервера.", 'danger');
+                    showAlert('Не удалось обработать ответ сервера.', 'danger');
                 }
             }
         });
@@ -85,10 +101,21 @@ $(document).ready(function() {
 
     // Повторная отправка кода
     $('#resendCodeBtn').on('click', function() {
-        $.post('{% url "login" %}', $('#loginForm').serialize(), function(response) {
-            if (response.status === 'code_required') {
-                startCountdown();
-                showMessage('Новый код отправлен');
+        const formData = $('#loginForm').serializeArray();
+        formData.push({ name: 'csrfmiddlewaretoken', value: getCsrfToken() });
+
+        $.ajax({
+            url: $('#loginForm').attr('action'),
+            type: 'POST',
+            data: formData,
+            success: function(response) {
+                if (response.status === 'code_required') {
+                    startCountdown();
+                    showAlert('Новый код отправлен', 'success');
+                }
+            },
+            error: function(xhr) {
+                showAlert('Ошибка при отправке кода.', 'danger');
             }
         });
     });
@@ -122,14 +149,6 @@ $(document).ready(function() {
         $('#fullAuthCode').val('');
     }
 
-    function showError(message) {
-        $('#error-message').text(message).show();  // покажи где-нибудь над формой
-    }
-
-    function showMessage(message) {
-        // Реализация показа сообщения
-    }
-
     function showAlert(message, type = 'danger') {
         const alertBox = $('#alert-box');
         const alertMessage = $('#alert-message');
@@ -137,14 +156,10 @@ $(document).ready(function() {
         alertBox.removeClass('alert-danger alert-success alert-warning alert-info');
         alertBox.addClass(`alert-${type}`);
         alertMessage.text(message);
-
         alertBox.show();
 
-        // Автоматически скрыть через 5 секунд
         setTimeout(() => {
             alertBox.fadeOut();
         }, 5000);
     }
 });
-
-
