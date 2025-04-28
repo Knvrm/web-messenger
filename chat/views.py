@@ -19,6 +19,13 @@ def chat_home(request):
                  to_attr='last_message_list')
     ).order_by('-created_at')
 
+    print(f"Session data: {request.session.items()}")
+    context = {
+        'private_key': request.session.get('private_key', ''),
+        'key_salt': request.session.get('key_salt', '')
+    }
+    print(f"Rendering chat.html with context: {context}")
+
     for chat in user_chats:
         chat.has_messages = len(chat.last_message_list) > 0
         chat.last_message = chat.last_message_list[0] if chat.has_messages else None
@@ -41,7 +48,9 @@ def chat_home(request):
         'chats': user_chats,
         'selected_chat': selected_chat,
         'messages': chat_messages,
-        'recipient': recipient  # Добавляем в контекст
+        'recipient': recipient,
+        'private_key': request.session.get('private_key', ''),
+        'key_salt': request.session.get('key_salt', '')
     })
 
 

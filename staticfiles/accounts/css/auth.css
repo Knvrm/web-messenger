@@ -1,24 +1,109 @@
-/* static/css/auth.css */
+/* static/accounts/css/auth.css */
 
-.auth-code-input {
-    display: flex;
-    gap: 10px;
-    justify-content: center;
+/* Стили для формы логина */
+.card {
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.auth-code-input input {
-    width: 40px;
-    height: 50px;
-    font-size: 1.5rem;
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    font-size: 1.25rem;
     text-align: center;
 }
 
+.card-body {
+    padding: 1.5rem;
+}
+
+.input-group-text {
+    background-color: #f8f9fa;
+    border: 1px solid #ced4da;
+    color: #495057;
+}
+
+.form-control {
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+.form-control:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.btn-primary {
+    border-radius: 4px;
+    font-size: 1rem;
+    padding: 0.5rem 1rem;
+}
+
+.card-footer {
+    background-color: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    font-size: 0.9rem;
+}
+
+/* Стили для алерта */
+#alert-box {
+    border-radius: 4px;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+#alert-box.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+#alert-box.fade {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+}
+
+/* Стили для модального окна */
 #authModal .modal-dialog {
     max-width: 400px;
 }
 
+#authModal .modal-content {
+    border-radius: 8px;
+}
+
+#authModal .modal-header {
+    border-bottom: 1px solid #dee2e6;
+}
+
+#authModal .modal-title {
+    font-size: 1.25rem;
+}
+
+.auth-code-input {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+}
+
+.auth-code-input input {
+    width: 40px;
+    height: 40px;
+    font-size: 1.2rem;
+    text-align: center;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.auth-code-input input:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    outline: none;
+}
+
 #timerText {
     font-size: 0.9rem;
+    color: #6c757d;
+    text-align: center;
 }
 
 #countdown {
@@ -26,36 +111,10 @@
     color: #dc3545;
 }
 
-#alert-box {
-    transition: opacity 0.3s ease;
-}
-
-.auth-code-input {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-}
-
-.auth-code-input input[type="text"] {
-  width: 50px;
-  height: 50px;
-  font-size: 24px;
-  text-align: center;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-}
-
-.auth-code-input input[type="text"]:focus {
-  border-color: #007bff;
-  box-shadow: 0 0 0 3px rgba(0,123,255,0.25);
-  outline: none;
-}
-
-#timerText {
-  font-size: 1.5rem;
-  margin-top: 5px;
-}
-
 #resendCodeBtn {
-  font-size: 1.5rem;
+    font-size: 0.9rem;
+}
+
+#submitAuthCode, #cancelAuthBtn {
+    font-size: 0.9rem;
 }

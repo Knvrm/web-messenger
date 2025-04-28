@@ -4,3 +4,13 @@ __pycache__/
 db.sqlite3
 venv/
 .DS_Store
+
+certs/
+*.pem
+*.key
+*.crt
+
+*.log
+*.tmp
+
+.idea/

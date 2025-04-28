@@ -3,7 +3,14 @@ from django.db import models
 import random
 import string
 from django.utils import timezone
-from .pbkdf2_hmac import hash_password, verify_password
+from .pbkdf2_hmac import hash_password, verify_password, generate_salt
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.fernet import Fernet
+import base64
+import os
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
@@ -33,22 +40,85 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     username = models.CharField(max_length=150, unique=True, blank=True, null=True)
     first_name = models.CharField(max_length=150, blank=True)
     last_name = models.CharField(max_length=150, blank=True)
-    password_hash = models.CharField(max_length=256, default='')
-    salt = models.BinaryField(max_length=16, default=b'')
+    password_hash = models.CharField(max_length=256)
+    salt = models.BinaryField(max_length=16)
     date_joined = models.DateTimeField(auto_now_add=True)
+    public_key = models.TextField(blank=True, null=True)  # Публичный ключ RSA (PEM)
+    private_key = models.TextField(blank=True, null=True)  # Зашифрованный приватный ключ
+    key_salt = models.BinaryField(max_length=16, blank=True, null=True)  # Соль для PBKDF2
 
     objects = CustomUserManager()
 
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = []
+    REQUIRED_FIELDS = ['username']
 
     def set_password(self, raw_password):
         salt, hashed = hash_password(raw_password)
+        print(f"Setting password: hash={hashed[:10]}..., salt={salt.hex()[:10]}...")
         self.salt = salt
         self.password_hash = hashed
 
     def check_password(self, raw_password):
-        return verify_password(self.salt, self.password_hash, raw_password)
+        result = verify_password(self.salt, self.password_hash, raw_password)
+        print(f"Checking password for {self.email}: {result}")
+        return result
+
+    def generate_rsa_keys(self, password: str):
+        """Генерирует RSA-ключи (2048 бит) и шифрует приватный ключ с помощью AES-GCM."""
+        print("Generating RSA keys...")
+        private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048
+        )
+        public_key = private_key.public_key()
+
+        public_pem = public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        ).decode('utf-8')
+
+        private_pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        ).decode('utf-8')
+
+        # PBKDF2 для ключа
+        salt = os.urandom(16)
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,  # 256 бит для AES-GCM
+            salt=salt,
+            iterations=100000,
+        )
+        key = kdf.derive(password.encode())
+
+        # AES-GCM шифрование
+        iv = os.urandom(12)  # 12 байт для GCM
+        cipher = Cipher(algorithms.AES(key), modes.GCM(iv))
+        encryptor = cipher.encryptor()
+        ciphertext = encryptor.update(private_pem.encode()) + encryptor.finalize()
+        encrypted_private_key = base64.b64encode(iv + ciphertext + encryptor.tag).decode('utf-8')
+
+        self.public_key = public_pem
+        self.private_key = encrypted_private_key
+        self.key_salt = salt
+        print(f"Encrypted private_key length: {len(encrypted_private_key)}")
+
+    def decrypt_private_key(self, password: str) -> str:
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=self.key_salt,
+            iterations=100000,
+        )
+        key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+        fernet = Fernet(key)
+        private_pem = fernet.decrypt(self.private_key.encode()).decode('utf-8')
+        return private_pem
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
         force_real_delete = kwargs.pop('force_real_delete', False)

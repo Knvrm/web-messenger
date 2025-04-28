@@ -587,3 +587,115 @@ document.addEventListener('DOMContentLoaded', function() {
         container.scrollTop = container.scrollHeight;
     }
 });
+
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Checking private key availability');
+    const privateKey = window.sessionPrivateKey || null;
+    const sessionPrivateKey = document.querySelector('body').dataset.privateKey || '';
+    const sessionKeySalt = document.querySelector('body').dataset.keySalt || '';
+
+    console.log('Private key:', privateKey ? 'Exists' : 'Missing');
+    console.log('Session private key:', sessionPrivateKey ? 'Exists' : 'Missing');
+    console.log('Session key salt:', sessionKeySalt ? 'Exists' : 'Missing');
+
+    const decryptModal = document.querySelector('#decryptModal');
+    const decryptForm = document.querySelector('#decryptForm');
+    const decryptPassword = document.querySelector('#decryptPassword');
+
+    if (!privateKey && sessionPrivateKey && decryptModal) {
+        console.log('Showing decrypt modal');
+        const bootstrapModal = new bootstrap.Modal(decryptModal);
+        bootstrapModal.show();
+    } else if (!sessionPrivateKey) {
+        console.log('No session private key. Possible session issue.');
+    }
+
+    if (decryptForm) {
+        decryptForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const password = decryptPassword.value;
+            try {
+                console.log('Attempting to decrypt private key in chat');
+                // Конвертируем key_salt из hex в Uint8Array
+                const salt = new Uint8Array(sessionKeySalt.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+                // Генерируем ключ с PBKDF2
+                const enc = new TextEncoder();
+                const keyMaterial = await crypto.subtle.importKey(
+                    'raw',
+                    enc.encode(password),
+                    'PBKDF2',
+                    false,
+                    ['deriveBits']
+                );
+                const derivedBits = await crypto.subtle.deriveBits(
+                    {
+                        name: 'PBKDF2',
+                        salt: salt,
+                        iterations: 100000, // Должно совпадать с сервером
+                        hash: 'SHA-256'
+                    },
+                    keyMaterial,
+                    256
+                );
+                const derivedKey = await crypto.subtle.importKey(
+                    'raw',
+                    derivedBits,
+                    'AES-GCM',
+                    false,
+                    ['decrypt']
+                );
+                // Расшифровываем private_key
+                const encryptedKey = new Uint8Array(atob(sessionPrivateKey).split('').map(c => c.charCodeAt(0)));
+                const iv = encryptedKey.slice(0, 12);
+                const ciphertext = encryptedKey.slice(12);
+                const decrypted = await crypto.subtle.decrypt(
+                    {
+                        name: 'AES-GCM',
+                        iv: iv
+                    },
+                    derivedKey,
+                    ciphertext
+                );
+                window.sessionPrivateKey = new TextDecoder().decode(decrypted);
+                console.log('Private key decrypted in chat:', window.sessionPrivateKey ? 'Success' : 'Failed');
+                const bootstrapModal = bootstrap.Modal.getInstance(decryptModal);
+                bootstrapModal.hide();
+                decryptPassword.value = '';
+            } catch (e) {
+                console.error('Decryption error:', e);
+                alert('Ошибка расшифровки. Проверьте пароль.');
+            }
+        });
+    } else {
+        console.log('Decrypt form not found');
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Chat app initialized');
+
+    // Проверка доступности ключа
+    function checkPrivateKey() {
+        console.log('Checking private key availability');
+        const privateKey = "{{ private_key | escapejs }}"; // Из контекста шаблона
+        const keySalt = "{{ key_salt | escapejs }}";
+        const sessionPrivateKey = sessionStorage.getItem('sessionPrivateKey');
+
+        console.log('Private key:', privateKey ? 'Exists' : 'Missing');
+        console.log('Session private key:', sessionPrivateKey ? 'Exists' : 'Missing');
+        console.log('Session key salt:', keySalt ? 'Exists' : 'Missing');
+
+        if (!sessionPrivateKey) {
+            console.error('No session private key. Possible session issue.');
+            alert('Ошибка: Приватный ключ недоступен. Попробуйте перелогиниться.');
+            return;
+        }
+
+        // Пример использования ключа
+        console.log('Using private key, length:', sessionPrivateKey.length);
+        alert(`Ключ доступен! Длина: ${sessionPrivateKey.length}`);
+    }
+
+    // Вызов проверки (например, по кнопке или при загрузке)
+    checkPrivateKey();
+});

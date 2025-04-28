@@ -1,11 +1,10 @@
 from django import forms
-from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.core.exceptions import ValidationError
 from .models import CustomUser
 from .domain_check import validate_domain
 
 class RegistrationForm(forms.ModelForm):
-    password1 = forms.CharField(widget=forms.PasswordInput, label="Пароль")
+    password1 = forms.CharField(widget=forms.PasswordInput, label="Пароль", min_length=8)
     password2 = forms.CharField(widget=forms.PasswordInput, label="Подтверждение пароля")
     email = forms.EmailField(required=True, label="Email")
 
@@ -33,7 +32,8 @@ class RegistrationForm(forms.ModelForm):
 
     def save(self, commit=True):
         user = super().save(commit=False)
-        user.set_password(self.cleaned_data['password1'])  # Твой PBKDF2
+        user.set_password(self.cleaned_data['password1'])
+        user.generate_rsa_keys(self.cleaned_data['password1'])  # Генерация RSA-ключей
         if commit:
             user.save()
         return user
@@ -41,6 +41,7 @@ class RegistrationForm(forms.ModelForm):
 class LoginForm(forms.Form):
     email = forms.EmailField(label='Email')
     password = forms.CharField(widget=forms.PasswordInput, label='Пароль')
+    confirmation_code = forms.CharField(max_length=6, required=False, label='Код подтверждения')
 
     def clean(self):
         cleaned_data = super().clean()

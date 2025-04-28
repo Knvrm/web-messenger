@@ -165,3 +165,8 @@ CSRF_COOKIE_SECURE = True
 
 CSRF_COOKIE_HTTPONLY = False  # Для доступа JavaScript к CSRF-токену
 CSRF_TRUSTED_ORIGINS = ['https://mymessenger.local:8443']
+
+# SECURE_CSP_DEFAULT_SRC = ["'self'"]
+# SECURE_CSP_SCRIPT_SRC = ["'self'", "https://cdn.jsdelivr.net"]
+# SECURE_CSP_STYLE_SRC = ["'self'", "https://cdn.jsdelivr.net"]
+# SECURE_CSP_FONT_SRC = ["'self'", "https://cdn.jsdelivr.net"]

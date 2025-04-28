@@ -1,28 +1,25 @@
+{% load static %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <title>Авторизация</title>
-    {% load static %}
     <link rel="icon" href="{% static 'favicon/favicon.ico' %}" sizes="any">
-    <meta charset="UTF-8">
-    <link rel="stylesheet" href="{% static 'accounts/css/auth.css' %}">
-    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"
-    rel="stylesheet" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{% static 'accounts/css/auth.css' %}">
 </head>
 <body data-verify-url="{% url 'verify_auth_code' %}">
-    {% block content %}
-    <div class="container" style="margin-top:40px">
-        <div class="row">
-            <div class="col-sm-6 col-md-4 col-md-offset-4">
-                <div class="panel panel-default">
-                    <div class="panel-heading">
-                        <strong> Авторизация </strong>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <strong>Авторизация</strong>
                     </div>
-                    <div class="panel-body">
-
-                        <!-- Вывод ошибок (например, неправильный логин или пароль) -->
+                    <div class="card-body">
+                        <!-- Вывод ошибок -->
                         {% if form.errors %}
                             <div class="alert alert-danger">
                                 <ul>
@@ -33,105 +30,84 @@
                             </div>
                         {% endif %}
 
-                        <form id="loginForm" role="form" action="{% url 'login' %}" method="POST">
+                        <form id="loginForm" action="{% url 'login' %}" method="POST">
                             {% csrf_token %}
-                            <fieldset>
-                                <div class="row">
-                                    <div class="center-block">
-                                        <img class="profile-img"
-                                             src="https://bit.ly/2gSVBOy"
-                                             alt="" style="width: 96px; height: 96px; margin: 0 auto 10px;
-                                             display: block; border-radius: 50%;">
-                                    </div>
+                            <div class="text-center mb-3">
+                                <img class="profile-img"
+                                     src="https://bit.ly/2gSVBOy"
+                                     alt=""
+                                     style="width: 96px; height: 96px; border-radius: 50%;">
+                            </div>
+                            <div class="mb-3">
+                                <div class="input-group">
+                                    <span class="input-group-text">
+                                        <i class="bi bi-person"></i>
+                                    </span>
+                                    <input class="form-control" autocomplete="email"
+                                           name="email" type="text" autofocus
+                                           value="{{ form.email.value|default_if_none:'' }}"
+                                           placeholder="Email">
                                 </div>
-                                <div class="row">
-                                    <div class="col-sm-12 col-md-10 col-md-offset-1">
-                                        <div class="form-group">
-                                            <div class="input-group">
-                                                <span class="input-group-addon">
-                                                    <i class="glyphicon glyphicon-user"></i>
-                                                </span>
-                                                <input class="form-control" autocomplete="email"
-                                                       name="email" type="text" autofocus
-                                                       value="{{ form.email.value|default_if_none:'' }}">
-                                            </div>
-                                        </div>
-                                        <div class="form-group">
-                                            <div class="input-group">
-                                                <span class="input-group-addon">
-                                                    <i class="glyphicon glyphicon-lock"></i>
-                                                </span>
-                                                <input class="form-control" placeholder="Password" autocomplete="password"
-                                                       name="password" type="password">
-                                            </div>
-                                        </div>
-                                        <div class="form-group">
-                                            <button type="submit" class="btn btn-lg btn-primary btn-block">Войти</button>
-                                        </div>
-                                    </div>
+                            </div>
+                            <div class="mb-3">
+                                <div class="input-group">
+                                    <span class="input-group-text">
+                                        <i class="bi bi-lock"></i>
+                                    </span>
+                                    <input class="form-control" placeholder="Пароль" autocomplete="current-password"
+                                           name="password" id="id_password" type="password">
                                 </div>
-                            </fieldset>
+                            </div>
+                            <div>
+                                <button type="submit" class="btn btn-primary w-100">Войти</button>
+                            </div>
                         </form>
                     </div>
-                    <div class="panel-footer" style="padding: 1px 15px; color: #A0A0A0">
-                        У вас еще нет аккаунта? <a href="{% url 'register' %}"> Зарегистрироваться </a>
+                    <div class="card-footer text-muted text-center">
+                        У вас еще нет аккаунта? <a href="{% url 'register' %}">Зарегистрироваться</a>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    <div id="alert-box" class="alert alert-danger alert-dismissible" role="alert" style="display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            z-index: 1055; width: 90%; max-width: 500px;">
-      <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-        <span aria-hidden="true">&times;</span>
-      </button>
-      <span id="alert-message"></span>
+
+    <div id="alert-box" class="alert alert-danger alert-dismissible" role="alert" style="display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 1055; width: 90%; max-width: 500px;">
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        <span id="alert-message"></span>
     </div>
 
-    <div class="modal fade" id="authModal" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Подтверждение входа</h5>
-          </div>
-          <div class="modal-body">
-            <p>Мы отправили 6-значный код на вашу почту. Введите его ниже:</p>
-
-            <div class="auth-code-input mb-3">
-              <input type="text" maxlength="1" class="form-control text-center" data-index="0">
-              <input type="text" maxlength="1" class="form-control text-center" data-index="1">
-              <input type="text" maxlength="1" class="form-control text-center" data-index="2">
-              <input type="text" maxlength="1" class="form-control text-center" data-index="3">
-              <input type="text" maxlength="1" class="form-control text-center" data-index="4">
-              <input type="text" maxlength="1" class="form-control text-center" data-index="5">
-              <input type="hidden" id="fullAuthCode" name="code">
+    <div id="authModal" class="modal fade" tabindex="-1" aria-labelledby="authModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="authModalLabel">Введите код подтверждения</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="auth-code-input d-flex justify-content-between mb-3">
+                        <input type="text" data-index="1" maxlength="1" class="form-control text-center" style="width: 40px;">
+                        <input type="text" data-index="2" maxlength="1" class="form-control text-center" style="width: 40px;">
+                        <input type="text" data-index="3" maxlength="1" class="form-control text-center" style="width: 40px;">
+                        <input type="text" data-index="4" maxlength="1" class="form-control text-center" style="width: 40px;">
+                        <input type="text" data-index="5" maxlength="1" class="form-control text-center" style="width: 40px;">
+                        <input type="text" data-index="6" maxlength="1" class="form-control text-center" style="width: 40px;">
+                    </div>
+                    <input type="hidden" id="fullAuthCode">
+                    <div id="timerText" class="mt-2">
+                        Повторная отправка через <span id="countdown">60</span> сек.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="resendCodeBtn" class="btn btn-secondary" disabled>Отправить снова</button>
+                    <button id="cancelAuthBtn" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button id="submitAuthCode" class="btn btn-primary">Подтвердить</button>
+                </div>
             </div>
-
-            <div class="d-flex justify-content-between align-items-center">
-              <div class="text-muted" id="timerText">
-                Отправить новый код через: <span id="countdown">60</span> сек.
-              </div>
-              <button id="resendCodeBtn" class="btn btn-link p-0" disabled>
-                Отправить снова
-              </button>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" id="cancelAuthBtn">Отмена</button>
-            <button type="button" class="btn btn-primary" id="submitAuthCode">Подтвердить</button>
-          </div>
         </div>
-      </div>
     </div>
 
-    {% load static %}
-    <script type="text/javascript">
-        var verifyAuthUrl = "{% url 'verify_auth_code' %}";
-        const csrfToken = '{{ csrf_token }}';
-    </script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{% static 'accounts/js/auth.js' %}"></script>
-    {% endblock %}
 </body>
 </html>

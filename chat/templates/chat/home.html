@@ -390,6 +390,26 @@
       </div>
     </div>
 
+    <!-- Модальное окно для ввода пароля -->
+    <div class="modal fade" id="decryptModal" tabindex="-1" aria-labelledby="decryptModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="decryptModalLabel">Введите пароль</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="decryptForm">
+                        <div class="mb-3">
+                            <label for="decryptPassword" class="form-label">Пароль</label>
+                            <input type="password" class="form-control" id="decryptPassword" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Подтвердить</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
     {% endblock %}
     {{ selected_chat.type|json_script:"selectedChatType" }}
     <script src="{% static 'chat/js/chat.js' %}"></script>
