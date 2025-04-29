@@ -7,7 +7,6 @@ from .pbkdf2_hmac import hash_password, verify_password, generate_salt
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.fernet import Fernet
 import base64
 import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -104,18 +103,6 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         self.private_key = encrypted_private_key
         self.key_salt = salt
         print(f"Encrypted private_key length: {len(encrypted_private_key)}")
-
-    def decrypt_private_key(self, password: str) -> str:
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=self.key_salt,
-            iterations=100000,
-        )
-        key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
-        fernet = Fernet(key)
-        private_pem = fernet.decrypt(self.private_key.encode()).decode('utf-8')
-        return private_pem
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)

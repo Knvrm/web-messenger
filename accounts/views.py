@@ -1,14 +1,12 @@
 import base64
 import json
-import time
-
 from django.contrib.auth import login, authenticate, logout
 from django.db import transaction
 from django.http import JsonResponse
 from django.contrib import messages
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt, csrf_protect
+from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_POST
 from .forms import RegistrationForm, LoginForm
 from django.shortcuts import render, redirect
@@ -16,7 +14,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 import random
 import string
-from datetime import datetime, timedelta
+from datetime import timedelta
 from .models import EmailConfirmation, CustomUser
 
 def generate_confirmation_code():
@@ -226,6 +224,7 @@ def login_view(request):
             'errors': form.errors.as_json()
         }, status=400)
     return render(request, "accounts/login.html", {"form": LoginForm()})
+
 
 def verify_auth_code(request):
     if request.method == "POST":

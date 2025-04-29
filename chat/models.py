@@ -26,6 +26,9 @@ class Message(models.Model):
     room = models.ForeignKey(ChatRoom, on_delete=models.CASCADE, related_name='messages')
     sender = models.ForeignKey(User, on_delete=models.CASCADE)
     content = models.TextField()
+    encrypted_key = models.TextField(blank=True, null=True)  # Base64 RSA-encrypted AES key
+    iv = models.TextField(blank=True, null=True)  # Base64 AES initialization vector
+    tag = models.TextField(blank=True, null=True)  # Base64 GCM authentication tag
     timestamp = models.DateTimeField(auto_now_add=True)
     is_read = models.BooleanField(default=False)
 

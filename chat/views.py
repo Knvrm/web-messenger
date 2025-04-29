@@ -13,6 +13,9 @@ User = get_user_model()
 
 @login_required
 def chat_home(request):
+    print(f"Chat view - User authenticated: {request.user.is_authenticated}")
+    print(f"Chat view - User: {request.user}")
+    print(f"Chat view - Session: {request.session.items()}")
     user_chats = request.user.chat_rooms.prefetch_related(
         Prefetch('messages',
                  queryset=Message.objects.order_by('-timestamp'),
@@ -264,3 +267,15 @@ def remove_user_from_chat(request, chat_id):
             'message': f'Ошибка сервера: {str(e)}'
         }, status=500)
 
+@login_required
+@require_GET
+def get_public_key(request, user_id):
+    try:
+        user = User.objects.get(id=user_id)
+        if not user.public_key:
+            return JsonResponse({'status': 'error', 'message': 'Public key not found'}, status=404)
+        return JsonResponse({'status': 'success', 'public_key': user.public_key})
+    except User.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'User not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)

@@ -132,7 +132,7 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 LOGIN_URL = "/accounts/login/"
-LOGIN_REDIRECT_URL = "chat-home"
+LOGIN_REDIRECT_URL = "/chat/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
 
 ASGI_APPLICATION = "messenger.asgi.application"
