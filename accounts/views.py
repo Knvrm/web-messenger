@@ -233,7 +233,7 @@ def verify_auth_code(request):
         user_id = request.session.get('auth_user_id')
         stored_code = request.session.get('auth_code')
 
-        print(f"Verifying code: entered={entered_code}, stored={stored_code}, user_id={user_id}")
+        #print(f"Verifying code: entered={entered_code}, stored={stored_code}, user_id={user_id}")
 
         if not entered_code or not csrf_token:
             return JsonResponse({'status': 'error', 'message': 'Неверный код или токен'}, status=400)
@@ -248,15 +248,15 @@ def verify_auth_code(request):
             # Проверка private_key
             try:
                 base64.b64decode(user.private_key)
-                print(f"Valid Base64 private_key, length: {len(user.private_key)}")
+                #print(f"Valid Base64 private_key, length: {len(user.private_key)}")
             except Exception as e:
-                print(f"Invalid Base64 private_key: {e}")
+                #print(f"Invalid Base64 private_key: {e}")
                 return JsonResponse({'status': 'error', 'message': 'Ошибка ключа'}, status=500)
 
             request.session['private_key'] = user.private_key
             request.session['key_salt'] = user.key_salt.hex()
             request.session.modified = True
-            print(f"Session after login: {request.session.items()}")
+            #print(f"Session after login: {request.session.items()}")
 
             del request.session['auth_user_id']
             del request.session['auth_code']

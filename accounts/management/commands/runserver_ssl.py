@@ -3,6 +3,7 @@ import ssl
 from django.core.management.commands.runserver import Command as RunserverCommand
 from django.core.servers.basehttp import WSGIServer
 from wsgiref.simple_server import make_server
+from django.utils import autoreload
 
 class Command(RunserverCommand):
     help = "Runs a development server with HTTPS."
@@ -28,8 +29,6 @@ class Command(RunserverCommand):
         return handler
 
     def inner_run(self, *args, **options):
-        from django.conf import settings
-        from django.utils import autoreload
 
         # Извлечение addr и port из addrport
         addrport = options.get('addrport', '127.0.0.1:8000')

@@ -21,13 +21,13 @@ def chat_home(request):
                  to_attr='last_message_list')
     ).order_by('-created_at')
 
-    print(f"Session data: {request.session.items()}")
+    #print(f"Session data: {request.session.items()}")
     context = {
         'private_key': request.session.get('private_key', ''),
         'key_salt': request.session.get('key_salt', ''),
         'current_user_id': request.user.id
     }
-    print(f"Rendering chat.html with context: {context}")
+    #print(f"Rendering chat.html with context: {context}")
 
     for chat in user_chats:
         chat.has_messages = len(chat.last_message_list) > 0
@@ -85,8 +85,8 @@ def create_chat(request):
         user_ids = data.get('users', [])
         encrypted_session_keys = data.get('encrypted_session_keys', {})
 
-        print(user_ids)
-        print(encrypted_session_keys)
+        #print(user_ids)
+        #print(encrypted_session_keys)
 
         if not user_ids:
             return JsonResponse({'status': 'error', 'message': 'No users selected'}, status=400)
@@ -290,5 +290,23 @@ def get_public_key(request, user_id):
         return JsonResponse({'status': 'success', 'public_key': user.public_key})
     except User.DoesNotExist:
         return JsonResponse({'status': 'error', 'message': 'User not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+@login_required
+def get_last_message(request, chat_id):
+    try:
+        chat = ChatRoom.objects.get(id=chat_id, participants=request.user)
+        last_message = chat.messages.last()
+        if not last_message:
+            return JsonResponse({'status': 'success', 'content': None, 'iv': None, 'tag': None})
+        return JsonResponse({
+            'status': 'success',
+            'content': last_message.content,
+            'iv': last_message.iv,
+            'tag': last_message.tag
+        })
+    except ChatRoom.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Chat not found'}, status=403)
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)

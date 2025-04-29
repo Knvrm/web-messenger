@@ -12,4 +12,5 @@ urlpatterns = [
     path('<int:chat_id>/remove_user/', views.remove_user_from_chat, name='remove_user_from_chat'),
     path('get-public-key/<int:user_id>/', views.get_public_key, name='get_public_key'),
     path('get-session-key/<int:chat_id>/', views.get_session_key, name='get_session_key'),
+    path('get-last-message/<int:chat_id>/', views.get_last_message, name='get-last-message'),
 ]

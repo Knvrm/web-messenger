@@ -39,7 +39,12 @@
             </div>
             <div class="chat-list">
                 {% for chat in chats %}
-                <a href="?chat_id={{ chat.id }}" class="chat-item {% if selected_chat.id == chat.id %}active{% endif %}">
+                <a href="?chat_id={{ chat.id }}"
+                   class="chat-item {% if selected_chat.id == chat.id %}active{% endif %}"
+                   data-encrypted-content="{{ chat.messages.last.content|escape }}"
+                   data-iv="{{ chat.messages.last.iv|escape }}"
+                   data-tag="{{ chat.messages.last.tag|escape }}"
+                   data-chat-type="{{ chat.type }}">
                     <div class="chat-avatar">
                         {% if chat.type == 'DM' %}
                             {% for member in chat.participants.all %}

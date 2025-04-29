@@ -121,7 +121,7 @@ def hash_password(password):
     salt = generate_salt()
     pbkdf2 = PBKDF2(password, salt)
     hashed = pbkdf2.derive_key()
-    return salt, hashed  # Возвращаем hashed как hex-строку
+    return salt, hashed
 
 def verify_password(stored_salt, stored_hash, password):
     pbkdf2 = PBKDF2(password, stored_salt)

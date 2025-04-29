@@ -34,6 +34,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.send_history()
 
     async def receive(self, text_data):
+        print(f"[{time.time()}] Received message: {text_data}")
         try:
             data = json.loads(text_data)
             message_type = data.get('type', 'message')
@@ -45,7 +46,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             content = data.get('content', '').strip()
             iv = data.get('iv')
             tag = data.get('tag')
-
+            print(f"[{time.time()}] Parsed message: type={message_type}, content={content}, iv={iv}, tag={tag}")
             if not content:
                 await self.send_error("Сообщение не может быть пустым")
                 return
@@ -66,6 +67,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             #     print(f"Ошибка ML анализа: {str(e)}")
 
             urls = re.findall(r'https?://[^\s<>"]+|www\.[^\s<>"]+', content)
+            print(f"[{time.time()}] Checking for URLs in content: {content}")
             if urls:
                 try:
                     loop = asyncio.get_running_loop()
@@ -93,9 +95,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
                         alert_type="url_check_error"
                     )
                     return
-
+            print(f"[{time.time()}] Saving message for user: {self.user.username}, content: {content}")
             message_obj = await self.save_message(self.user, content, iv, tag)
+            print(f"[{time.time()}] Message saved: ID={message_obj.id}")
+            print(f"[{time.time()}] Sending message to group: {self.room_group_name}")
             await self.send_message_to_chat(message_obj)
+            print(f"[{time.time()}] Sended message to group: {self.room_group_name}")
 
         except json.JSONDecodeError:
             await self.send_error("Неверный формат сообщения (ожидается JSON)")

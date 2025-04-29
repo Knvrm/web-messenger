@@ -218,6 +218,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const encryptedWithTag = new Uint8Array(ciphertext.length + tag.length);
             encryptedWithTag.set(ciphertext);
             encryptedWithTag.set(tag, ciphertext.length);
+            console.log('Decrypting with:', { ciphertext: Array.from(ciphertext), iv: Array.from(iv), tag: Array.from(tag) });
             const decrypted = await crypto.subtle.decrypt(
                 {
                     name: 'AES-GCM',
@@ -227,7 +228,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 sessionKey,
                 encryptedWithTag
             );
-            return new TextDecoder().decode(decrypted);
+            const result = new TextDecoder().decode(decrypted);
+            console.log('Decrypted result:', result);
+            return result;
         } catch (e) {
             console.error('Message decryption error:', e);
             throw e;
@@ -469,6 +472,34 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
+   async function decryptLastMessages() {
+        const chatItems = document.querySelectorAll('.chat-list .chat-item');
+        for (const chatItem of chatItems) {
+            const chatId = new URL(chatItem.href).searchParams.get('chat_id');
+            const encryptedContent = chatItem.dataset.encryptedContent;
+            const iv = chatItem.dataset.iv;
+            const tag = chatItem.dataset.tag;
+            const lastMessageElement = chatItem.querySelector('.last-message');
+            const chatType = chatItem.dataset.chatType || 'DM'; // Предполагаем DM, если не указано
+
+            if (encryptedContent && iv && tag && lastMessageElement && lastMessageElement.textContent !== 'Нет сообщений') {
+                try {
+                    // Получаем sessionKey для данного чата
+                    const sessionKey = await getSessionKey(chatId);
+                    const messageText = await decryptMessage(
+                        { content: encryptedContent, iv: iv, tag: tag },
+                        sessionKey
+                    );
+                    console.log('Decrypted last message for chat', chatId, ':', messageText);
+                    lastMessageElement.textContent = messageText.length > 25 ? messageText.substring(0, 22) + '...' : messageText;
+                } catch (e) {
+                    console.error('Failed to decrypt last message for chat', chatId, ':', e);
+                    lastMessageElement.textContent = '[Ошибка расшифровки]';
+                }
+            }
+        }
+    };
+
     // --- WebSocket и отправка сообщений ---
     async function initWebSocket() {
         const chatHeader = document.querySelector('.chat-header');
@@ -490,6 +521,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Расшифровываем сообщения, отрендеренные сервером
         await loadInitialMessages(chatId, sessionKey, chatType);
+        await decryptLastMessages(chatId, sessionKey, chatType);
 
         const chatSocket = new WebSocket(wsUrl);
         const messageForm = document.getElementById('message-form');
@@ -504,12 +536,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 const data = JSON.parse(e.data);
                 console.log('WebSocket message received:', data);
                 if (data.type === 'new_message') {
-                    let messageText = data.message;
+                    let messageText = '[Зашифрованное сообщение]'; // Начальное значение
                     const isCurrentUser = data.sender_id === parseInt(document.body.dataset.currentUserId);
-                    if ((chatType === 'DM' || chatType === 'GM') && data.content && data.iv && data.tag) {
+                    if ((chatType === 'DM' || chatType === 'GM') && data.message && data.iv && data.tag) {
                         try {
+                            console.log('Attempting to decrypt message with:', {
+                                content: data.message,
+                                iv: data.iv,
+                                tag: data.tag
+                            });
                             messageText = await decryptMessage(
-                                { content: data.content, iv: data.iv, tag: data.tag },
+                                { content: data.message, iv: data.iv, tag: data.tag },
                                 sessionKey
                             );
                             console.log('Decrypted message:', messageText);
@@ -517,24 +554,45 @@ document.addEventListener('DOMContentLoaded', function() {
                             console.error('Failed to decrypt message:', e);
                             messageText = '[Ошибка расшифровки]';
                         }
+                    } else {
+                        console.warn('No encryption data provided or invalid chat type:', {
+                            content: data.message,
+                            iv: data.iv,
+                            tag: data.tag,
+                            chatType
+                        });
                     }
-                    addMessageToChat({ ...data, message: messageText }, isCurrentUser, chatType);
+                    if (!isCurrentUser) {
+                        addMessageToChat({ ...data, message: messageText }, isCurrentUser, chatType);
+                    }
                 } else if (data.type === 'history') {
                     const messagesContainer = document.querySelector('.messages-container');
                     messagesContainer.innerHTML = ''; // Очищаем контейнер перед добавлением истории
                     for (const msg of data.messages) {
                         const isCurrentUser = msg.sender_id === parseInt(document.body.dataset.currentUserId);
-                        let messageText = msg.content;
+                        let messageText = '[Зашифрованное сообщение]';
                         if ((chatType === 'DM' || chatType === 'GM') && msg.content && msg.iv && msg.tag) {
                             try {
+                                console.log('Attempting to decrypt history message with:', {
+                                    content: msg.content,
+                                    iv: msg.iv,
+                                    tag: msg.tag
+                                });
                                 messageText = await decryptMessage(
                                     { content: msg.content, iv: msg.iv, tag: msg.tag },
                                     sessionKey
                                 );
+                                console.log('Decrypted history message:', messageText);
                             } catch (e) {
                                 console.error('Failed to decrypt history message:', e);
                                 messageText = '[Ошибка расшифровки]';
                             }
+                        } else {
+                            console.warn('No encryption data for history message:', {
+                                content: msg.content,
+                                iv: msg.iv,
+                                tag: msg.tag
+                            });
                         }
                         addMessageToChat(
                             {
@@ -570,10 +628,26 @@ document.addEventListener('DOMContentLoaded', function() {
             const message = messageInput.value.trim();
 
             if (message && chatSocket.readyState === WebSocket.OPEN) {
+                const timestamp = new Date().toISOString();
+                const tempMessageId = `temp-${Date.now()}`; // Временный ID для сообщения
                 if (chatType === 'DM' || chatType === 'GM') {
                     try {
                         const encryptedData = await encryptMessage(message, sessionKey);
                         console.log('Encrypted data:', encryptedData);
+                        // Добавляем сообщение локально в расшифрованном виде
+                        addMessageToChat(
+                            {
+                                message: message,
+                                sender: 'You', // Имя пользователя можно заменить на реальное
+                                sender_id: document.body.dataset.currentUserId,
+                                message_id: tempMessageId,
+                                timestamp: timestamp,
+                                is_read: false
+                            },
+                            true,
+                            chatType
+                        );
+                        // Отправляем зашифрованное сообщение через WebSocket
                         chatSocket.send(JSON.stringify({
                             type: 'message',
                             content: encryptedData.content,
@@ -586,6 +660,19 @@ document.addEventListener('DOMContentLoaded', function() {
                         return;
                     }
                 } else {
+                    // Добавляем сообщение локально для нешифрованных чатов
+                    addMessageToChat(
+                        {
+                            message: message,
+                            sender: 'You',
+                            sender_id: document.body.dataset.currentUserId,
+                            message_id: tempMessageId,
+                            timestamp: timestamp,
+                            is_read: false
+                        },
+                        true,
+                        chatType
+                    );
                     chatSocket.send(JSON.stringify({ type: 'message', content: message }));
                 }
                 messageInput.value = '';
@@ -630,6 +717,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 const messageTextElement = existingMessage.querySelector('.message-text');
                 if (messageTextElement) {
                     messageTextElement.textContent = data.message;
+                }
+                const readStatusElement = existingMessage.querySelector('.read-status');
+                if (readStatusElement) {
+                    readStatusElement.textContent = data.is_read ? '✓✓' : '✓';
+                }
+                // Обновляем реальный message_id, если это было временное сообщение
+                if (data.message_id.startsWith('temp-')) {
+                    existingMessage.dataset.messageId = data.message_id;
                 }
                 return;
             }
@@ -931,6 +1026,7 @@ document.addEventListener('DOMContentLoaded', function() {
             chatApp.init();
             initWebSocket();
             initUI();
+            await decryptLastMessages();
         }
     }
 

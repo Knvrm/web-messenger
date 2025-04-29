@@ -222,12 +222,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 console.log('Debug info:', response.debug || debugMessage);
-                alert(`Auth result: ${debugMessage}\nRedirecting in 3 seconds...`);
-
-                setTimeout(() => {
-                    console.log('Redirecting to:', redirectUrl);
-                    window.location.href = redirectUrl;
-                }, 3000);
+                window.location.href = redirectUrl; // Немедленный редирект
             },
             error: function(xhr) {
                 console.log('Auth code error:', xhr.status, xhr.responseText);
