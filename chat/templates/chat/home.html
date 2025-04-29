@@ -11,7 +11,8 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
 </head>
 <body data-create-chat-url="{% url 'create-chat' %}"
-      data-get-users-url="{% url 'get-users' %}">
+      data-get-users-url="{% url 'get-users' %}"
+      data-current-user-id="{{ request.user.id }}">
     {% block content %}
     <div class="chat-container">
         <!-- Боковая панель с чатами -->
@@ -220,7 +221,12 @@
             <div id="error-notification" class="error-notification" style="display: none;"></div>
             <div class="messages-container">
                 {% for message in messages %}
-                <div class="message-row {% if message.sender == request.user %}sent{% else %}received{% endif %}">
+                <div class="message-row {% if message.sender == request.user %}sent{% else %}received{% endif %}"
+                     data-message-id="{{ message.id }}"
+                     data-encrypted-content="{{ message.content|escape }}"
+                     data-iv="{{ message.iv|escape }}"
+                     data-tag="{{ message.tag|escape }}"
+                     data-sender-id="{{ message.sender.id }}">
                     {% if message.sender != request.user %}
                     <div class="message-avatar">
                         <div class="user-avatar">
@@ -235,9 +241,7 @@
                                 {{ message.sender.username }}
                             </div>
                             {% endif %}
-                            <div class="message-text">
-                                {{ message.content }}
-                            </div>
+                            <div class="message-text">Encrypted</div>
                             <div class="message-meta">
                                 <span class="message-time">
                                     {{ message.timestamp|date:"H:i" }}

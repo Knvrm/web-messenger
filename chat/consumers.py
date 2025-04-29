@@ -24,7 +24,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
             await self.close(code=4001)
             return
 
-        # Определяем тип чата
         self.is_dm = await self.is_direct_message()
 
         await self.channel_layer.group_add(
@@ -43,43 +42,29 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 await self.send_error("Неподдерживаемый тип сообщения")
                 return
 
-            # Извлечение данных
             content = data.get('content', '').strip()
-            encrypted_key = data.get('encrypted_key') if self.is_dm else None
-            iv = data.get('iv') if self.is_dm else None
-            tag = data.get('tag') if self.is_dm else None
+            iv = data.get('iv')
+            tag = data.get('tag')
 
             if not content:
                 await self.send_error("Сообщение не может быть пустым")
                 return
 
-            detector = PhishingDetector()
-            # 1. Проверка текста ML-моделью
-            try:
-                loop = asyncio.get_running_loop()
-                ml_result = await asyncio.wait_for(
-                    loop.run_in_executor(
-                        None,
-                        lambda: detector.analyze_text(content)
-                    ),
-                    timeout=3.0
-                )
+            # detector = PhishingDetector()
+            # try:
+            #     loop = asyncio.get_running_loop()
+            #     ml_result = await asyncio.wait_for(
+            #         loop.run_in_executor(
+            #             None,
+            #             lambda: detector.analyze_text(content)
+            #         ),
+            #         timeout=3.0
+            #     )
+            # except asyncio.TimeoutError:
+            #     print("ML анализ превысил таймаут, продолжаем базовые проверки")
+            # except Exception as e:
+            #     print(f"Ошибка ML анализа: {str(e)}")
 
-                # Раскомментируйте, если хотите включить блокировку фишинга
-                # if ml_result.get('is_phishing', False) and ml_result.get('confidence', 0) > 0.7:
-                #     await self.send_security_alert(
-                #         "Сообщение содержит признаки фишинга",
-                #         ml_result,
-                #         alert_type="phishing"
-                #     )
-                #     return
-
-            except asyncio.TimeoutError:
-                print("ML анализ превысил таймаут, продолжаем базовые проверки")
-            except Exception as e:
-                print(f"Ошибка ML анализа: {str(e)}")
-
-            # 2. Проверка URL
             urls = re.findall(r'https?://[^\s<>"]+|www\.[^\s<>"]+', content)
             if urls:
                 try:
@@ -100,7 +85,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                                 alert_type="malicious_url"
                             )
                             return
-
                 except Exception as e:
                     print(f"Ошибка проверки URL: {str(e)}")
                     await self.send_security_alert(
@@ -110,8 +94,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     )
                     return
 
-            # 3. Сохранение и отправка сообщения
-            message_obj = await self.save_message(self.user, content, encrypted_key, iv, tag)
+            message_obj = await self.save_message(self.user, content, iv, tag)
             await self.send_message_to_chat(message_obj)
 
         except json.JSONDecodeError:
@@ -145,7 +128,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'sender': message_obj.sender.username,
                 'sender_id': message_obj.sender.id,
                 'message_id': message_obj.id,
-                'encrypted_key': message_obj.encrypted_key,
                 'iv': message_obj.iv,
                 'tag': message_obj.tag,
                 'timestamp': message_obj.timestamp.isoformat(),
@@ -154,17 +136,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
         )
 
     async def chat_message(self, event):
-        # Исключаем отправителя, если нужно
-        if event.get('exclude_sender') and str(self.user.id) == str(event['sender_id']):
-            return
-
         await self.send(text_data=json.dumps({
             'type': 'new_message',
             'message': event['message'],
             'sender': event['sender'],
             'sender_id': event['sender_id'],
             'message_id': event['message_id'],
-            'encrypted_key': event['encrypted_key'],
             'iv': event['iv'],
             'tag': event['tag'],
             'timestamp': event['timestamp'],
@@ -188,13 +165,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
         return ChatRoom.objects.filter(id=self.room_id).exists()
 
     @database_sync_to_async
-    def save_message(self, user, content, encrypted_key=None, iv=None, tag=None):
+    def save_message(self, user, content, iv, tag):
         room = ChatRoom.objects.get(id=self.room_id)
         return Message.objects.create(
             room=room,
             sender=user,
             content=content,
-            encrypted_key=encrypted_key,
             iv=iv,
             tag=tag
         )
@@ -208,7 +184,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'content': msg.content,
                 'sender__username': msg.sender.username,
                 'sender_id': msg.sender.id,
-                'encrypted_key': msg.encrypted_key,
                 'iv': msg.iv,
                 'tag': msg.tag,
                 'timestamp': msg.timestamp.isoformat(),

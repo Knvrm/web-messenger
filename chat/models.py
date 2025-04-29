@@ -14,6 +14,7 @@ class ChatRoom(models.Model):
     type = models.CharField(max_length=2, choices=ROOM_TYPE_CHOICES, default='DM')
     participants = models.ManyToManyField(User, related_name='chat_rooms')
     created_at = models.DateTimeField(auto_now_add=True)
+    encrypted_session_keys = models.JSONField(blank=True, null=True)  # {"user_id": "encrypted_key"}
 
     def __str__(self):
         if self.type == 'DM':
@@ -25,8 +26,7 @@ class ChatRoom(models.Model):
 class Message(models.Model):
     room = models.ForeignKey(ChatRoom, on_delete=models.CASCADE, related_name='messages')
     sender = models.ForeignKey(User, on_delete=models.CASCADE)
-    content = models.TextField()
-    encrypted_key = models.TextField(blank=True, null=True)  # Base64 RSA-encrypted AES key
+    content = models.TextField()  # Base64 AES-GCM encrypted message
     iv = models.TextField(blank=True, null=True)  # Base64 AES initialization vector
     tag = models.TextField(blank=True, null=True)  # Base64 GCM authentication tag
     timestamp = models.DateTimeField(auto_now_add=True)

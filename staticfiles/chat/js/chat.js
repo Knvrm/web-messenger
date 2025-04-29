@@ -1,21 +1,17 @@
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Chat app initialized');
 
-    // --- Проверка и расшифровка ключа ---
+    // --- Проверка и расшифровка приватного ключа ---
     async function checkPrivateKey() {
         console.log('Checking private key availability');
         const sessionPrivateKey = sessionStorage.getItem('sessionPrivateKey');
 
-        console.log('Session private key:', sessionPrivateKey ? 'Exists' : 'Missing');
-
         if (sessionPrivateKey) {
-            // Ключ уже расшифрован, используем его
             window.sessionPrivateKey = sessionPrivateKey;
             console.log('Using private key, length:', sessionPrivateKey.length);
             return true;
         }
 
-        // Ключ отсутствует, запрашиваем private_key и key_salt с сервера
         try {
             const response = await fetch('/accounts/get-private-key/', {
                 method: 'GET',
@@ -29,10 +25,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (data.status === 'success' && data.private_key && data.key_salt) {
                 console.log('Received private_key and key_salt from server');
-                // Сохраняем для использования в #decryptForm
                 sessionStorage.setItem('encryptedPrivateKey', data.private_key);
                 sessionStorage.setItem('keySalt', data.key_salt);
-                // Показываем модальное окно для ввода пароля
                 const decryptModal = document.querySelector('#decryptModal');
                 if (decryptModal) {
                     console.log('Showing decrypt modal');
@@ -121,7 +115,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 decryptPassword.value = '';
                 sessionStorage.removeItem('encryptedPrivateKey');
                 sessionStorage.removeItem('keySalt');
-                // Перезагружаем чат
                 chatApp.init();
                 initWebSocket();
                 initUI();
@@ -133,16 +126,66 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // --- Функции шифрования ---
-    async function encryptMessage(message, publicKeyPem) {
+    async function encryptSessionKey(sessionKey, publicKeyPem) {
         try {
-            // 1. Генерируем случайный AES-ключ
-            const aesKey = await crypto.subtle.generateKey(
-                { name: 'AES-GCM', length: 256 },
+            const pemContents = publicKeyPem
+                .replace(/-----(BEGIN|END) PUBLIC KEY-----|\n/g, '')
+                .trim();
+            const binaryDer = new Uint8Array(atob(pemContents).split('').map(c => c.charCodeAt(0)));
+            const publicKey = await crypto.subtle.importKey(
+                'spki',
+                binaryDer,
+                { name: 'RSA-OAEP', hash: 'SHA-256' },
+                false,
+                ['encrypt']
+            );
+            const exportedKey = await crypto.subtle.exportKey('raw', sessionKey);
+            const encryptedKey = await crypto.subtle.encrypt(
+                { name: 'RSA-OAEP' },
+                publicKey,
+                exportedKey
+            );
+            return btoa(String.fromCharCode(...new Uint8Array(encryptedKey)));
+        } catch (e) {
+            console.error('Session key encryption error:', e);
+            throw e;
+        }
+    }
+
+    async function decryptSessionKey(encryptedKey, privateKeyPem) {
+        try {
+            const pemContents = privateKeyPem
+                .replace(/-----(BEGIN|END) PRIVATE KEY-----|\n/g, '')
+                .trim();
+            const binaryDer = new Uint8Array(atob(pemContents).split('').map(c => c.charCodeAt(0)));
+            const privateKey = await crypto.subtle.importKey(
+                'pkcs8',
+                binaryDer,
+                { name: 'RSA-OAEP', hash: 'SHA-256' },
+                false,
+                ['decrypt']
+            );
+            const encryptedKeyBytes = new Uint8Array(atob(encryptedKey).split('').map(c => c.charCodeAt(0)));
+            const decryptedKey = await crypto.subtle.decrypt(
+                { name: 'RSA-OAEP' },
+                privateKey,
+                encryptedKeyBytes
+            );
+            return crypto.subtle.importKey(
+                'raw',
+                decryptedKey,
+                'AES-GCM',
                 true,
                 ['encrypt', 'decrypt']
             );
+        } catch (e) {
+            console.error('Session key decryption error:', e);
+            throw e;
+        }
+    }
 
-            // 2. Шифруем сообщение AES-GCM
+    async function encryptMessage(message, sessionKey) {
+        try {
             const iv = crypto.getRandomValues(new Uint8Array(12));
             const enc = new TextEncoder();
             const encrypted = await crypto.subtle.encrypt(
@@ -151,105 +194,49 @@ document.addEventListener('DOMContentLoaded', function() {
                     iv: iv,
                     tagLength: 128
                 },
-                aesKey,
+                sessionKey,
                 enc.encode(message)
             );
-
-            // Разделяем шифртекст и тег
             const ciphertext = encrypted.slice(0, -16);
             const tag = encrypted.slice(-16);
-
-            // 3. Экспортируем AES-ключ
-            const exportedAesKey = await crypto.subtle.exportKey('raw', aesKey);
-
-            // 4. Импортируем публичный ключ RSA
-            const publicKey = await crypto.subtle.importKey(
-                'spki',
-                new TextEncoder().encode(publicKeyPem),
-                { name: 'RSA-OAEP', hash: 'SHA-256' },
-                false,
-                ['encrypt']
-            );
-
-            // 5. Шифруем AES-ключ с RSA
-            const encryptedKey = await crypto.subtle.encrypt(
-                { name: 'RSA-OAEP' },
-                publicKey,
-                exportedAesKey
-            );
-
-            // 6. Кодируем в Base64
             return {
                 content: btoa(String.fromCharCode(...new Uint8Array(ciphertext))),
-                encrypted_key: btoa(String.fromCharCode(...new Uint8Array(encryptedKey))),
                 iv: btoa(String.fromCharCode(...iv)),
                 tag: btoa(String.fromCharCode(...new Uint8Array(tag)))
             };
         } catch (e) {
-            console.error('Encryption error:', e);
+            console.error('Message encryption error:', e);
             throw e;
         }
     }
 
-    async function decryptMessage(encryptedData, privateKeyPem) {
+    async function decryptMessage(encryptedData, sessionKey) {
         try {
-            // 1. Декодируем Base64
             const ciphertext = new Uint8Array(atob(encryptedData.content).split('').map(c => c.charCodeAt(0)));
-            const encryptedKey = new Uint8Array(atob(encryptedData.encrypted_key).split('').map(c => c.charCodeAt(0)));
             const iv = new Uint8Array(atob(encryptedData.iv).split('').map(c => c.charCodeAt(0)));
             const tag = new Uint8Array(atob(encryptedData.tag).split('').map(c => c.charCodeAt(0)));
-
-            // 2. Импортируем приватный ключ RSA
-            const privateKey = await crypto.subtle.importKey(
-                'pkcs8',
-                new TextEncoder().encode(privateKeyPem),
-                { name: 'RSA-OAEP', hash: 'SHA-256' },
-                false,
-                ['decrypt']
-            );
-
-            // 3. Расшифровываем AES-ключ
-            const decryptedAesKey = await crypto.subtle.decrypt(
-                { name: 'RSA-OAEP' },
-                privateKey,
-                encryptedKey
-            );
-
-            // 4. Импортируем AES-ключ
-            const aesKey = await crypto.subtle.importKey(
-                'raw',
-                decryptedAesKey,
-                'AES-GCM',
-                false,
-                ['decrypt']
-            );
-
-            // 5. Объединяем шифртекст и тег
             const encryptedWithTag = new Uint8Array(ciphertext.length + tag.length);
             encryptedWithTag.set(ciphertext);
             encryptedWithTag.set(tag, ciphertext.length);
-
-            // 6. Расшифровываем сообщение
             const decrypted = await crypto.subtle.decrypt(
                 {
                     name: 'AES-GCM',
                     iv: iv,
                     tagLength: 128
                 },
-                aesKey,
+                sessionKey,
                 encryptedWithTag
             );
-
             return new TextDecoder().decode(decrypted);
         } catch (e) {
-            console.error('Decryption error:', e);
+            console.error('Message decryption error:', e);
             throw e;
         }
     }
 
-    // --- Запрос public_key ---
     async function getPublicKey(userId) {
         try {
+            console.log('Fetching public key for user:', userId);
             const response = await fetch(`/chat/get-public-key/${userId}/`, {
                 headers: {
                     'Accept': 'application/json',
@@ -258,6 +245,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             const data = await response.json();
             if (data.status === 'success') {
+                console.log('Public key:', data.public_key);
                 return data.public_key;
             } else {
                 throw new Error(data.message || 'Failed to fetch public key');
@@ -268,10 +256,46 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    async function getSessionKey(chatId) {
+        try {
+            const cachedKey = sessionStorage.getItem(`chat_${chatId}_sessionKey`);
+            if (cachedKey) {
+                const keyBytes = new Uint8Array(atob(cachedKey).split('').map(c => c.charCodeAt(0)));
+                return crypto.subtle.importKey(
+                    'raw',
+                    keyBytes,
+                    'AES-GCM',
+                    true,
+                    ['encrypt', 'decrypt']
+                );
+            }
+
+            const response = await fetch(`/chat/get-session-key/${chatId}/`, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+            const data = await response.json();
+            if (data.status === 'success') {
+                const sessionKey = await decryptSessionKey(data.encrypted_key, window.sessionPrivateKey);
+                const exportedKey = await crypto.subtle.exportKey('raw', sessionKey);
+                sessionStorage.setItem(`chat_${chatId}_sessionKey`, btoa(String.fromCharCode(...new Uint8Array(exportedKey))));
+                return sessionKey;
+            } else {
+                throw new Error(data.message || 'Failed to fetch session key');
+            }
+        } catch (e) {
+            console.error('Error fetching session key:', e);
+            throw e;
+        }
+    }
+
     const chatHeader = document.querySelector('.chat-header');
     const chatType = chatHeader ? chatHeader.dataset.chatType : null;
     const recipientIdScript = document.getElementById('recipientId');
     const recipientId = recipientIdScript ? JSON.parse(recipientIdScript.textContent) : null;
+    console.log('Recipient ID:', recipientId);
 
     if (chatType === 'DM' && recipientId) {
         chatHeader.dataset.recipientId = recipientId;
@@ -312,23 +336,38 @@ document.addEventListener('DOMContentLoaded', function() {
 
         async loadUsers() {
             try {
+                console.log('Fetching users from:', `${this.baseUrl}${this.getUsersUrl}`);
                 const response = await fetch(`${this.baseUrl}${this.getUsersUrl}`, {
+                    method: 'GET',
                     headers: {
                         'Accept': 'application/json',
                         'X-Requested-With': 'XMLHttpRequest'
-                    }
+                    },
+                    credentials: 'include'
                 });
 
-                const data = await response.json();
+                if (response.status === 401 || response.status === 403) {
+                    console.error('User not authenticated');
+                    alert('Пожалуйста, войдите в систему');
+                    window.location.href = '/accounts/login/';
+                    return;
+                }
 
-                if (!response.ok || data.status !== 'success') {
+                if (!response.ok) {
+                    const text = await response.text();
+                    console.error('Server response:', text);
+                    throw new Error(`HTTP error: ${response.status} - ${text.slice(0, 100)}`);
+                }
+
+                const data = await response.json();
+                if (data.status !== 'success') {
                     throw new Error(data.message || 'Ошибка сервера');
                 }
 
                 this.renderUsers(data.users);
             } catch (error) {
                 console.error('Ошибка загрузки пользователей:', error);
-                this.showError(error.message);
+                this.showError(error.message || 'Не удалось загрузить пользователей');
             }
         },
 
@@ -354,12 +393,35 @@ document.addEventListener('DOMContentLoaded', function() {
         async handleCreateChat() {
             const selectedUsers = this.getSelectedUsers();
 
-            if (selectedUsers.length === 0) {
-                this.showError('Выберите хотя бы одного участника');
+            // Проверяем, выбран ли хотя бы один другой пользователь
+            if (selectedUsers.length < 1) {
+                this.showError('Выберите хотя бы одного другого участника');
                 return;
             }
-
+            console.log('select user ' + selectedUsers);
             try {
+                // Генерируем сессионный ключ
+                const sessionKey = await crypto.subtle.generateKey(
+                    { name: 'AES-GCM', length: 256 },
+                    true,
+                    ['encrypt', 'decrypt']
+                );
+
+                // Получаем публичные ключи всех участников (включая текущего пользователя)
+                const currentUserId = document.body.dataset.currentUserId;
+                console.log('current user ' + currentUserId);
+                if (!currentUserId) {
+                    throw new Error('Current user ID is missing in chat header');
+                }
+                const userIds = selectedUsers.concat([currentUserId]);
+
+                const encryptedSessionKeys = {};
+                for (const userId of userIds) {
+                    const publicKey = await getPublicKey(userId);
+                    encryptedSessionKeys[userId] = await encryptSessionKey(sessionKey, publicKey);
+                }
+
+                // Отправляем запрос на создание чата
                 const response = await fetch(`${this.baseUrl}${this.createChatUrl}`, {
                     method: 'POST',
                     headers: {
@@ -369,24 +431,23 @@ document.addEventListener('DOMContentLoaded', function() {
                     },
                     credentials: 'include',
                     body: JSON.stringify({
-                        users: selectedUsers
+                        users: selectedUsers,
+                        encrypted_session_keys: encryptedSessionKeys
                     })
                 });
 
                 if (!response.ok) {
-                    try {
-                        const errorData = await response.json();
-                        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-                    } catch (e) {
-                        const errorText = await response.text();
-                        throw new Error(errorText || `HTTP error! status: ${response.status}`);
-                    }
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
                 }
 
                 const data = await response.json();
 
                 if (data.status === 'success' || data.status === 'exists') {
-                    window.location.href = `${this.baseUrl}/chat/`;
+                    // Сохраняем сессионный ключ для нового чата
+                    const exportedKey = await crypto.subtle.exportKey('raw', sessionKey);
+                    sessionStorage.setItem(`chat_${data.chat_id}_sessionKey`, btoa(String.fromCharCode(...new Uint8Array(exportedKey))));
+                    window.location.href = `${this.baseUrl}/chat/?chat_id=${data.chat_id}`;
                 } else {
                     this.showError(data.message || 'Неизвестная ошибка');
                 }
@@ -409,15 +470,26 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     // --- WebSocket и отправка сообщений ---
-    function initWebSocket() {
+    async function initWebSocket() {
         const chatHeader = document.querySelector('.chat-header');
         if (!chatHeader) return;
 
         const chatId = chatHeader.dataset.chatId;
         const chatType = chatHeader.dataset.chatType;
-        const recipientId = chatHeader.dataset.recipientId || null;
         const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
         const wsUrl = `${protocol}mymessenger.local:8444/ws/chat/${chatId}/`;
+
+        let sessionKey;
+        try {
+            sessionKey = await getSessionKey(chatId);
+        } catch (e) {
+            console.error('Failed to get session key:', e);
+            alert('Ошибка: Не удалось получить сессионный ключ.');
+            return;
+        }
+
+        // Расшифровываем сообщения, отрендеренные сервером
+        await loadInitialMessages(chatId, sessionKey, chatType);
 
         const chatSocket = new WebSocket(wsUrl);
         const messageForm = document.getElementById('message-form');
@@ -430,26 +502,55 @@ document.addEventListener('DOMContentLoaded', function() {
         chatSocket.onmessage = async function(e) {
             try {
                 const data = JSON.parse(e.data);
+                console.log('WebSocket message received:', data);
                 if (data.type === 'new_message') {
                     let messageText = data.message;
-                    if (chatType === 'DM' && data.content && data.encrypted_key && data.iv && data.tag) {
-                        // Расшифровка для DM
+                    const isCurrentUser = data.sender_id === parseInt(document.body.dataset.currentUserId);
+                    if ((chatType === 'DM' || chatType === 'GM') && data.content && data.iv && data.tag) {
                         try {
                             messageText = await decryptMessage(
-                                {
-                                    content: data.content,
-                                    encrypted_key: data.encrypted_key,
-                                    iv: data.iv,
-                                    tag: data.tag
-                                },
-                                window.sessionPrivateKey
+                                { content: data.content, iv: data.iv, tag: data.tag },
+                                sessionKey
                             );
+                            console.log('Decrypted message:', messageText);
                         } catch (e) {
                             console.error('Failed to decrypt message:', e);
                             messageText = '[Ошибка расшифровки]';
                         }
                     }
-                    addMessageToChat({ ...data, message: messageText }, data.sender === '{{ request.user.username }}');
+                    addMessageToChat({ ...data, message: messageText }, isCurrentUser, chatType);
+                } else if (data.type === 'history') {
+                    const messagesContainer = document.querySelector('.messages-container');
+                    messagesContainer.innerHTML = ''; // Очищаем контейнер перед добавлением истории
+                    for (const msg of data.messages) {
+                        const isCurrentUser = msg.sender_id === parseInt(document.body.dataset.currentUserId);
+                        let messageText = msg.content;
+                        if ((chatType === 'DM' || chatType === 'GM') && msg.content && msg.iv && msg.tag) {
+                            try {
+                                messageText = await decryptMessage(
+                                    { content: msg.content, iv: msg.iv, tag: msg.tag },
+                                    sessionKey
+                                );
+                            } catch (e) {
+                                console.error('Failed to decrypt history message:', e);
+                                messageText = '[Ошибка расшифровки]';
+                            }
+                        }
+                        addMessageToChat(
+                            {
+                                message: messageText,
+                                sender: msg.sender__username,
+                                sender_id: msg.sender_id,
+                                message_id: msg.id,
+                                iv: msg.iv,
+                                tag: msg.tag,
+                                timestamp: msg.timestamp,
+                                is_read: msg.is_read
+                            },
+                            isCurrentUser,
+                            chatType
+                        );
+                    }
                 }
             } catch (error) {
                 console.error('Error parsing message:', error);
@@ -469,15 +570,13 @@ document.addEventListener('DOMContentLoaded', function() {
             const message = messageInput.value.trim();
 
             if (message && chatSocket.readyState === WebSocket.OPEN) {
-                if (chatType === 'DM' && recipientId) {
+                if (chatType === 'DM' || chatType === 'GM') {
                     try {
-                        // Получаем public_key получателя
-                        const publicKey = await getPublicKey(recipientId);
-                        // Шифруем сообщение
-                        const encryptedData = await encryptMessage(message, publicKey);
+                        const encryptedData = await encryptMessage(message, sessionKey);
+                        console.log('Encrypted data:', encryptedData);
                         chatSocket.send(JSON.stringify({
+                            type: 'message',
                             content: encryptedData.content,
-                            encrypted_key: encryptedData.encrypted_key,
                             iv: encryptedData.iv,
                             tag: encryptedData.tag
                         }));
@@ -487,23 +586,63 @@ document.addEventListener('DOMContentLoaded', function() {
                         return;
                     }
                 } else {
-                    // Для GM или без шифрования (временно)
-                    chatSocket.send(JSON.stringify({ 'message': message }));
+                    chatSocket.send(JSON.stringify({ type: 'message', content: message }));
                 }
                 messageInput.value = '';
             }
         });
 
-        function addMessageToChat(data, isCurrentUser) {
+        async function loadInitialMessages(chatId, sessionKey, chatType) {
+            const messages = document.querySelectorAll('.message-row');
+            for (const message of messages) {
+                const messageId = message.dataset.messageId;
+                const encryptedContent = message.dataset.encryptedContent;
+                const iv = message.dataset.iv;
+                const tag = message.dataset.tag;
+                const senderId = message.dataset.senderId;
+                const isCurrentUser = senderId === document.body.dataset.currentUserId;
+
+                let messageText = 'Encrypted';
+                if ((chatType === 'DM' || chatType === 'GM') && encryptedContent && iv && tag) {
+                    try {
+                        messageText = await decryptMessage(
+                            { content: encryptedContent, iv: iv, tag: tag },
+                            sessionKey
+                        );
+                        console.log('Decrypted initial message:', messageText);
+                    } catch (e) {
+                        console.error('Failed to decrypt initial message:', e);
+                        messageText = '[Ошибка расшифровки]';
+                    }
+                }
+                const messageTextElement = message.querySelector('.message-text');
+                if (messageTextElement) {
+                    messageTextElement.textContent = messageText;
+                }
+            }
+        }
+
+        function addMessageToChat(data, isCurrentUser, chatType) {
+            const messagesContainer = document.querySelector('.messages-container');
+            const existingMessage = messagesContainer.querySelector(`.message-row[data-message-id="${data.message_id}"]`);
+            if (existingMessage) {
+                // Обновляем существующее сообщение
+                const messageTextElement = existingMessage.querySelector('.message-text');
+                if (messageTextElement) {
+                    messageTextElement.textContent = data.message;
+                }
+                return;
+            }
+
             const messageClass = isCurrentUser ? 'sent' : 'received';
-            const chatType = chatHeader.dataset.chatType;
+            const senderInitial = data.sender ? data.sender.charAt(0).toUpperCase() : 'U';
 
             const messageElement = `
-                <div class="message-row ${messageClass}">
-                    ${!isCurrentUser && chatType === 'GM' ? `
+                <div class="message-row ${messageClass}" data-message-id="${data.message_id}" data-sender-id="${data.sender_id}">
+                    ${!isCurrentUser ? `
                     <div class="message-avatar">
                         <div class="user-avatar">
-                            ${data.sender.charAt(0).toUpperCase()}
+                            ${senderInitial}
                         </div>
                     </div>
                     ` : ''}
@@ -522,7 +661,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                             <div class="message-meta">
                                 <span class="message-time">
-                                    ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                    ${new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                 </span>
                                 ${isCurrentUser ? `
                                 <span class="read-status">
@@ -535,15 +674,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             `;
 
-            const container = document.querySelector('.messages-container');
-            container.insertAdjacentHTML('beforeend', messageElement);
-            container.scrollTop = container.scrollHeight;
+            messagesContainer.insertAdjacentHTML('beforeend', messageElement);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
     }
 
     // --- UI: Меню, модалки, переименование ---
     function initUI() {
-        // Меню чата
         const menuBtn = document.getElementById('chatMenuBtn');
         const dropdown = document.getElementById('chatDropdown');
 
@@ -562,7 +699,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
-        // Модальное окно chatInfoModal
         if (document.getElementById('chatInfoModal')) {
             const modal = new bootstrap.Modal(document.getElementById('chatInfoModal'));
             document.getElementById('chatInfoModal').addEventListener('shown.bs.modal', function() {
@@ -570,7 +706,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
-        // Переименование чата
         const chatNameDisplay = document.getElementById('chatNameDisplay');
         const editNameBtn = document.getElementById('editNameBtn');
 
@@ -664,7 +799,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        // Модальное окно для выхода из чата
         const leaveChatModal = new bootstrap.Modal(document.getElementById('leaveChatModal'));
         const confirmLeaveBtn = document.getElementById('confirmLeaveBtn');
         const leaveChatBtn = document.getElementById('leaveChatBtn');
@@ -724,7 +858,6 @@ document.addEventListener('DOMContentLoaded', function() {
             window.location.href = '/chat/';
         }
 
-        // Удаление участников
         const confirmRemoveModal = new bootstrap.Modal(document.getElementById('confirmRemoveModal'));
         let currentUserIdToRemove = null;
         let currentUsernameToRemove = null;
@@ -784,67 +917,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        // Таймер для обновления времени сообщений
         function updateMessageTimes() {
             document.querySelectorAll('.message-time').forEach(el => {
-                // Логика для динамического обновления
-                // Например, "1 мин назад" → "2 мин назад"
+                // Логика для динамического обновления времени
             });
         }
         setInterval(updateMessageTimes, 60000);
-
-        // Старая логика меню чата (для совместимости)
-        const chatMenuBtn = document.getElementById('chatMenuBtn');
-        const chatDropdown = document.getElementById('chatDropdown');
-
-        if (chatMenuBtn && chatDropdown) {
-            chatMenuBtn.addEventListener('click', toggleChatMenu);
-            document.querySelectorAll('.rename-chat-btn').forEach(btn => {
-                btn.addEventListener('click', renameChat);
-            });
-        }
-
-        function toggleChatMenu(e) {
-            e.stopPropagation();
-            chatDropdown.classList.toggle('show');
-        }
-
-        function renameChat(e) {
-            e.preventDefault();
-            const chatHeader = document.querySelector('.chat-header');
-            if (!chatHeader) return;
-            const chatId = chatHeader.dataset.chatId;
-            const chatName = chatHeader.dataset.chatName;
-            const csrfToken = chatHeader.dataset.csrfToken;
-            const newName = prompt("Введите новое название чата:", chatName);
-            if (newName && newName !== chatName) {
-                fetch(`/chat/rename/${chatId}/`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrfToken
-                    },
-                    body: JSON.stringify({ name: newName })
-                })
-                .then(response => {
-                    if (response.ok) {
-                        return response.json();
-                    }
-                    throw new Error('Ошибка сервера');
-                })
-                .then(data => {
-                    if (data.status === 'success') {
-                        location.reload();
-                    } else {
-                        alert(data.message || 'Ошибка при переименовании');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('Ошибка при переименовании чата');
-                });
-            }
-        }
     }
 
     // --- Инициализация ---

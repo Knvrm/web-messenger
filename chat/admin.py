@@ -1,20 +1,24 @@
-# chat/admin.py
 from django.contrib import admin
 from .models import ChatRoom, Message
 
 @admin.register(ChatRoom)
 class ChatRoomAdmin(admin.ModelAdmin):
     filter_horizontal = ['participants']
-    list_display = ['id', 'name', 'type', 'created_at']
+    list_display = ['id', 'name', 'type', 'created_at', 'get_participants']
     list_filter = ['type']
     search_fields = ['name', 'participants__username']
+    readonly_fields = ['created_at', 'encrypted_session_keys']
+
+    def get_participants(self, obj):
+        return ", ".join([user.username for user in obj.participants.all()])
+    get_participants.short_description = 'Participants'
 
 @admin.register(Message)
 class MessageAdmin(admin.ModelAdmin):
-    list_display = ['id', 'room', 'sender', 'content_preview', 'encrypted_key', 'iv', 'tag', 'timestamp', 'is_read']
+    list_display = ['id', 'room', 'sender', 'content_preview', 'iv', 'tag', 'timestamp', 'is_read']
     list_filter = ['room', 'sender', 'is_read']
     search_fields = ['content', 'sender__username']
-    readonly_fields = ['encrypted_key', 'iv', 'tag', 'timestamp']
+    readonly_fields = ['iv', 'tag', 'timestamp']
 
     def content_preview(self, obj):
         """Отображает первые 60 символов содержимого сообщения"""

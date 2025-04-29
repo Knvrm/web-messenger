@@ -4,18 +4,17 @@ from .models import ChatRoom, Message
 from django.contrib.auth import get_user_model
 import json
 from django.http import JsonResponse
-from django.views.decorators.http import require_GET, require_POST, require_http_methods
+from django.views.decorators.http import require_GET, require_POST
 from django.views.decorators.csrf import ensure_csrf_cookie
-from django.db.models import Prefetch, Q  # Добавляем импорт Max
-from django.urls import reverse
+from django.db.models import Prefetch
 
 User = get_user_model()
 
 @login_required
 def chat_home(request):
-    print(f"Chat view - User authenticated: {request.user.is_authenticated}")
-    print(f"Chat view - User: {request.user}")
-    print(f"Chat view - Session: {request.session.items()}")
+    #print(f"Chat view - User authenticated: {request.user.is_authenticated}")
+    #print(f"Chat view - User: {request.user}")
+    #print(f"Chat view - Session: {request.session.items()}")
     user_chats = request.user.chat_rooms.prefetch_related(
         Prefetch('messages',
                  queryset=Message.objects.order_by('-timestamp'),
@@ -25,7 +24,8 @@ def chat_home(request):
     print(f"Session data: {request.session.items()}")
     context = {
         'private_key': request.session.get('private_key', ''),
-        'key_salt': request.session.get('key_salt', '')
+        'key_salt': request.session.get('key_salt', ''),
+        'current_user_id': request.user.id
     }
     print(f"Rendering chat.html with context: {context}")
 
@@ -53,9 +53,9 @@ def chat_home(request):
         'messages': chat_messages,
         'recipient': recipient,
         'private_key': request.session.get('private_key', ''),
-        'key_salt': request.session.get('key_salt', '')
+        'key_salt': request.session.get('key_salt', ''),
+        'current_user_id': request.user.id
     })
-
 
 @login_required
 def rename_chat(request, chat_id):
@@ -83,15 +83,16 @@ def create_chat(request):
     try:
         data = json.loads(request.body)
         user_ids = data.get('users', [])
+        encrypted_session_keys = data.get('encrypted_session_keys', {})
 
-        # Проверяем, что выбраны пользователи
+        print(user_ids)
+        print(encrypted_session_keys)
+
         if not user_ids:
             return JsonResponse({'status': 'error', 'message': 'No users selected'}, status=400)
 
-        # Получаем объекты пользователей (исключая текущего)
         users = User.objects.filter(id__in=user_ids).exclude(id=request.user.id)
 
-        # Проверяем существующий личный чат (если выбран 1 пользователь)
         if users.count() == 1:
             existing_chat = ChatRoom.objects.filter(
                 type='DM',
@@ -104,22 +105,19 @@ def create_chat(request):
                     'chat_id': existing_chat.id
                 })
 
-        # Создаем новый чат
-        new_chat = ChatRoom.objects.create()
+        new_chat = ChatRoom.objects.create(
+            type='DM' if users.count() == 1 else 'GM',
+            encrypted_session_keys=encrypted_session_keys
+        )
         new_chat.participants.add(request.user, *users)
 
-        if new_chat.participants.count() > 2:
-            new_chat.type = 'GM'
-            # Получаем имена всех участников (кроме текущего пользователя, если нужно)
+        if new_chat.type == 'GM':
             member_names = list(users.values_list('username', flat=True))
-            # Добавляем текущего пользователя, если требуется
             if request.user.username not in member_names:
                 member_names.insert(0, request.user.username)
-            # Формируем название чата
             new_chat.name = ", ".join(member_names)
             new_chat.save()
 
-        # Возвращаем успешный ответ
         return JsonResponse({
             'status': 'success',
             'chat_id': new_chat.id,
@@ -146,6 +144,21 @@ def get_users_for_chat(request):
             'status': 'error',
             'message': str(e)
         }, status=500)
+
+@login_required
+@require_GET
+def get_session_key(request, chat_id):
+    try:
+        chat = ChatRoom.objects.get(id=chat_id, participants=request.user)
+        user_id = str(request.user.id)
+        encrypted_key = chat.encrypted_session_keys.get(user_id)
+        if not encrypted_key:
+            return JsonResponse({'status': 'error', 'message': 'Session key not found'}, status=404)
+        return JsonResponse({'status': 'success', 'encrypted_key': encrypted_key})
+    except ChatRoom.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Chat not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 @login_required
 def send_message(request, room_id):
