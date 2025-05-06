@@ -19,6 +19,7 @@ class CustomUserManager(BaseUserManager):
         user = self.model(email=email, **extra_fields)
         if password:
             user.set_password(password)
+            user.generate_rsa_keys(password)
         user.save(using=self._db)
         return user
 
@@ -42,9 +43,9 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     password_hash = models.CharField(max_length=256)
     salt = models.BinaryField(max_length=16)
     date_joined = models.DateTimeField(auto_now_add=True)
-    public_key = models.TextField(blank=True, null=True)  # Публичный ключ RSA (PEM)
-    private_key = models.TextField(blank=True, null=True)  # Зашифрованный приватный ключ
-    key_salt = models.BinaryField(max_length=16, blank=True, null=True)  # Соль для PBKDF2
+    public_key = models.TextField(blank=True, null=True)
+    private_key = models.TextField(blank=True, null=True)
+    key_salt = models.BinaryField(max_length=16, blank=True, null=True)
 
     objects = CustomUserManager()
 
@@ -58,12 +59,12 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         self.password_hash = hashed
 
     def check_password(self, raw_password):
-        result = verify_password(self.salt, self.password_hash, raw_password)
+        salt = bytes(self.salt) if isinstance(self.salt, memoryview) else self.salt
+        result = verify_password(salt, self.password_hash, raw_password)
         print(f"Checking password for {self.email}: {result}")
         return result
 
     def generate_rsa_keys(self, password: str):
-        """Генерирует RSA-ключи (2048 бит) и шифрует приватный ключ с помощью AES-GCM."""
         print("Generating RSA keys...")
         private_key = rsa.generate_private_key(
             public_exponent=65537,
@@ -82,18 +83,16 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
             encryption_algorithm=serialization.NoEncryption()
         ).decode('utf-8')
 
-        # PBKDF2 для ключа
         salt = os.urandom(16)
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
-            length=32,  # 256 бит для AES-GCM
+            length=32,
             salt=salt,
             iterations=100000,
         )
         key = kdf.derive(password.encode())
 
-        # AES-GCM шифрование
-        iv = os.urandom(12)  # 12 байт для GCM
+        iv = os.urandom(12)
         cipher = Cipher(algorithms.AES(key), modes.GCM(iv))
         encryptor = cipher.encryptor()
         ciphertext = encryptor.update(private_pem.encode()) + encryptor.finalize()

@@ -37,11 +37,11 @@ class CustomUserAdmin(admin.ModelAdmin):
     list_filter = ('is_active', 'is_staff', 'is_superuser')
     search_fields = ('username', 'email', 'first_name', 'last_name')
     ordering = ('username',)
-    readonly_fields = ('password_hash', 'salt', 'public_key', 'private_key', 'key_salt', 'decrypted_private_key')
+    readonly_fields = ('password_hash', 'salt', 'public_key', 'private_key', 'key_salt')
     fieldsets = (
         (None, {'fields': ('email', 'username', 'first_name', 'last_name')}),
-        ('Пароль', {'fields': ('password1', 'password2', 'password_hash', 'salt')}),
-        ('Ключи RSA', {'fields': ('public_key', 'private_key', 'key_salt', 'decrypt_password', 'decrypted_private_key')}),
+        ('Пароль', {'fields': ('password_hash', 'salt')}),
+        ('Ключи RSA', {'fields': ('public_key', 'private_key', 'key_salt')}),
         ('Права', {'fields': ('is_active', 'is_staff', 'is_superuser')}),
     )
     add_fieldsets = (
@@ -57,18 +57,6 @@ class CustomUserAdmin(admin.ModelAdmin):
 
     has_keys.boolean = True
     has_keys.short_description = 'Ключи созданы'
-
-    def decrypted_private_key(self, obj):
-        """Отображает расшифрованный приватный ключ, если указан пароль."""
-        decrypt_password = self.form.data.get('decrypt_password')
-        if decrypt_password and obj.private_key and obj.key_salt:
-            try:
-                return obj.decrypt_private_key(decrypt_password)
-            except Exception as e:
-                return f"Ошибка расшифровки: {str(e)}"
-        return "Укажите пароль для расшифровки"
-
-    decrypted_private_key.short_description = 'Расшифрованный приватный ключ'
 
     def force_delete_users(self, request, queryset):
         deleted_count = 0

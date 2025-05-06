@@ -225,15 +225,12 @@ def login_view(request):
         }, status=400)
     return render(request, "accounts/login.html", {"form": LoginForm()})
 
-
 def verify_auth_code(request):
     if request.method == "POST":
         entered_code = request.POST.get('code', '')
         csrf_token = request.POST.get('csrfmiddlewaretoken', '')
         user_id = request.session.get('auth_user_id')
         stored_code = request.session.get('auth_code')
-
-        #print(f"Verifying code: entered={entered_code}, stored={stored_code}, user_id={user_id}")
 
         if not entered_code or not csrf_token:
             return JsonResponse({'status': 'error', 'message': 'Неверный код или токен'}, status=400)
@@ -242,35 +239,49 @@ def verify_auth_code(request):
             return JsonResponse({'status': 'error', 'message': 'Сессия истекла'}, status=400)
 
         if entered_code == stored_code:
-            user = CustomUser.objects.get(id=user_id)
-            login(request, user)
-
-            # Проверка private_key
             try:
-                base64.b64decode(user.private_key)
-                #print(f"Valid Base64 private_key, length: {len(user.private_key)}")
-            except Exception as e:
-                #print(f"Invalid Base64 private_key: {e}")
-                return JsonResponse({'status': 'error', 'message': 'Ошибка ключа'}, status=500)
+                user = CustomUser.objects.get(id=user_id)
+                login(request, user)
 
-            request.session['private_key'] = user.private_key
-            request.session['key_salt'] = user.key_salt.hex()
-            request.session.modified = True
-            #print(f"Session after login: {request.session.items()}")
+                # Проверка private_key и key_salt
+                private_key = user.private_key if user.private_key else ''
+                key_salt_hex = ''
+                if user.key_salt:
+                    key_salt = bytes(user.key_salt) if isinstance(user.key_salt, memoryview) else user.key_salt
+                    key_salt_hex = key_salt.hex()
 
-            del request.session['auth_user_id']
-            del request.session['auth_code']
+                try:
+                    if private_key:
+                        base64.b64decode(private_key)
+                    #print(f"Valid Base64 private_key, length: {len(private_key)}")
+                except Exception as e:
+                    #print(f"Invalid Base64 private_key: {e}")
+                    return JsonResponse({'status': 'error', 'message': 'Ошибка ключа'}, status=500)
 
-            return JsonResponse({
-                'status': 'success',
-                'private_key': user.private_key,
-                'key_salt': user.key_salt.hex(),
-                'redirect': reverse('chat-home'),
-                'debug': {
-                    'private_key_length': len(user.private_key),
-                    'key_salt_length': len(user.key_salt.hex())
-                }
-            })
+                request.session['private_key'] = private_key
+                request.session['key_salt'] = key_salt_hex
+                request.session.modified = True
+                #print(f"Session after login: {request.session.items()}")
+
+                # Удаляем ключи, если они существуют
+                if 'auth_user_id' in request.session:
+                    del request.session['auth_user_id']
+                if 'auth_code' in request.session:
+                    del request.session['auth_code']
+
+                return JsonResponse({
+                    'status': 'success',
+                    'private_key': private_key,
+                    'key_salt': key_salt_hex,
+                    'redirect': reverse('chat-home'),
+                    'debug': {
+                        'private_key_length': len(private_key),
+                        'key_salt_length': len(key_salt_hex)
+                    }
+                })
+
+            except CustomUser.DoesNotExist:
+                return JsonResponse({'status': 'error', 'message': 'Пользователь не найден'}, status=400)
 
         return JsonResponse({'status': 'error', 'message': 'Неверный код подтверждения'}, status=400)
     return JsonResponse({'status': 'error', 'message': 'Метод не поддерживается'}, status=405)

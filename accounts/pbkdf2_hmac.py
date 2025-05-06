@@ -106,7 +106,11 @@ class PBKDF2:
         result = ''
         block_count = (self.key_length + 31) // 32
         for i in range(1, block_count + 1):
-            u = HMAC(self.password, self.salt + i.to_bytes(4, 'big'), self.hash_func).digest()
+            if isinstance(self.salt, memoryview):
+                salt = bytes(self.salt)  # Преобразуем memoryview в bytes
+            else:
+                salt = self.salt
+            u = HMAC(self.password, salt + i.to_bytes(4, 'big'), self.hash_func).digest()
             t = u
             for _ in range(1, self.iterations):
                 u = HMAC(self.password, u.encode('utf-8'), self.hash_func).digest()
@@ -124,6 +128,8 @@ def hash_password(password):
     return salt, hashed
 
 def verify_password(stored_salt, stored_hash, password):
+    if isinstance(stored_salt, memoryview):
+        stored_salt = bytes(stored_salt)  # Преобразуем memoryview в bytes
     pbkdf2 = PBKDF2(password, stored_salt)
     hashed = pbkdf2.derive_key()
     return hashed == stored_hash

@@ -131,7 +131,7 @@ if __name__ == "__main__":
 
     for email in test_emails:
         print("\n" + "=" * 50)
-        print(f"Анализируем письмо: {email[:100]}...")
+        print(f"Анализируем сообщение: {email[:200]}...")
         result = detector.analyze(email)
 
         if "error" in result:
@@ -140,6 +140,5 @@ if __name__ == "__main__":
 
         verdict = "🚨 ФИШИНГ" if result["is_phishing"] else "✅ Безопасно"
         print(f"\nРезультат:")
-        print(f"📧 {result['details']['text_sample']}")
         print(f"{verdict} | Уверенность: {result['confidence']:.0%}")
         print(f"Причина: {result['details']['reason']}")
