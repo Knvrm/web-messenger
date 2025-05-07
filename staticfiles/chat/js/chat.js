@@ -294,6 +294,21 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // --- Извлечение URL ---
+    function extractUrls(text) {
+        const urlRegex = /(?:https?:\/\/|www\.)(?:[^\s<>"]+\.)+[^\s<>"/]+(?:\/[^\s<>"]*)?/g;
+        const urls = text.match(urlRegex) || [];
+        console.log('Extracted URLs from text:', { text, urls });
+        return urls.filter(url => {
+            try {
+                new URL(url.startsWith('www.') ? 'http://' + url : url);
+                return true;
+            } catch {
+                return false;
+            }
+        });
+    }
+
     const chatHeader = document.querySelector('.chat-header');
     const chatType = chatHeader ? chatHeader.dataset.chatType : null;
     const recipientIdScript = document.getElementById('recipientId');
@@ -396,21 +411,18 @@ document.addEventListener('DOMContentLoaded', function() {
         async handleCreateChat() {
             const selectedUsers = this.getSelectedUsers();
 
-            // Проверяем, выбран ли хотя бы один другой пользователь
             if (selectedUsers.length < 1) {
                 this.showError('Выберите хотя бы одного другого участника');
                 return;
             }
             console.log('select user ' + selectedUsers);
             try {
-                // Генерируем сессионный ключ
                 const sessionKey = await crypto.subtle.generateKey(
                     { name: 'AES-GCM', length: 256 },
                     true,
                     ['encrypt', 'decrypt']
                 );
 
-                // Получаем публичные ключи всех участников (включая текущего пользователя)
                 const currentUserId = document.body.dataset.currentUserId;
                 console.log('current user ' + currentUserId);
                 if (!currentUserId) {
@@ -424,7 +436,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     encryptedSessionKeys[userId] = await encryptSessionKey(sessionKey, publicKey);
                 }
 
-                // Отправляем запрос на создание чата
                 const response = await fetch(`${this.baseUrl}${this.createChatUrl}`, {
                     method: 'POST',
                     headers: {
@@ -447,7 +458,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 const data = await response.json();
 
                 if (data.status === 'success' || data.status === 'exists') {
-                    // Сохраняем сессионный ключ для нового чата
                     const exportedKey = await crypto.subtle.exportKey('raw', sessionKey);
                     sessionStorage.setItem(`chat_${data.chat_id}_sessionKey`, btoa(String.fromCharCode(...new Uint8Array(exportedKey))));
                     window.location.href = `${this.baseUrl}/chat/?chat_id=${data.chat_id}`;
@@ -472,7 +482,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
-   async function decryptLastMessages() {
+    async function decryptLastMessages() {
         const chatItems = document.querySelectorAll('.chat-list .chat-item');
         for (const chatItem of chatItems) {
             const chatId = new URL(chatItem.href).searchParams.get('chat_id');
@@ -480,11 +490,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const iv = chatItem.dataset.iv;
             const tag = chatItem.dataset.tag;
             const lastMessageElement = chatItem.querySelector('.last-message');
-            const chatType = chatItem.dataset.chatType || 'DM'; // Предполагаем DM, если не указано
+            const chatType = chatItem.dataset.chatType || 'DM';
 
             if (encryptedContent && iv && tag && lastMessageElement && lastMessageElement.textContent !== 'Нет сообщений') {
                 try {
-                    // Получаем sessionKey для данного чата
                     const sessionKey = await getSessionKey(chatId);
                     const messageText = await decryptMessage(
                         { content: encryptedContent, iv: iv, tag: tag },
@@ -498,7 +507,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         }
-    };
+    }
 
     // --- WebSocket и отправка сообщений ---
     async function initWebSocket() {
@@ -519,9 +528,8 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        // Расшифровываем сообщения, отрендеренные сервером
         await loadInitialMessages(chatId, sessionKey, chatType);
-        await decryptLastMessages(chatId, sessionKey, chatType);
+        await decryptLastMessages();
 
         const chatSocket = new WebSocket(wsUrl);
         const messageForm = document.getElementById('message-form');
@@ -536,7 +544,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const data = JSON.parse(e.data);
                 console.log('WebSocket message received:', data);
                 if (data.type === 'new_message') {
-                    let messageText = '[Зашифрованное сообщение]'; // Начальное значение
+                    let messageText = '[Зашифрованное сообщение]';
                     const isCurrentUser = data.sender_id === parseInt(document.body.dataset.currentUserId);
                     if ((chatType === 'DM' || chatType === 'GM') && data.message && data.iv && data.tag) {
                         try {
@@ -567,7 +575,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 } else if (data.type === 'history') {
                     const messagesContainer = document.querySelector('.messages-container');
-                    messagesContainer.innerHTML = ''; // Очищаем контейнер перед добавлением истории
+                    messagesContainer.innerHTML = '';
                     for (const msg of data.messages) {
                         const isCurrentUser = msg.sender_id === parseInt(document.body.dataset.currentUserId);
                         let messageText = '[Зашифрованное сообщение]';
@@ -609,6 +617,12 @@ document.addEventListener('DOMContentLoaded', function() {
                             chatType
                         );
                     }
+                } else if (data.type === 'security_alert') {
+                    alert(`Предупреждение: ${data.message}\nДетали: ${JSON.stringify(data.details)}`);
+                    console.warn('Security alert received:', data);
+                } else if (data.type === 'error') {
+                    alert(`Ошибка: ${data.error}\nДетали: ${JSON.stringify(data.details)}`);
+                    console.error('Error received:', data);
                 }
             } catch (error) {
                 console.error('Error parsing message:', error);
@@ -629,16 +643,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (message && chatSocket.readyState === WebSocket.OPEN) {
                 const timestamp = new Date().toISOString();
-                const tempMessageId = `temp-${Date.now()}`; // Временный ID для сообщения
+                const tempMessageId = `temp-${Date.now()}`;
                 if (chatType === 'DM' || chatType === 'GM') {
                     try {
+                        const urls = extractUrls(message);
+                        console.log('Sending message with URLs:', { message, urls });
                         const encryptedData = await encryptMessage(message, sessionKey);
                         console.log('Encrypted data:', encryptedData);
-                        // Добавляем сообщение локально в расшифрованном виде
                         addMessageToChat(
                             {
                                 message: message,
-                                sender: 'You', // Имя пользователя можно заменить на реальное
+                                sender: 'You',
                                 sender_id: document.body.dataset.currentUserId,
                                 message_id: tempMessageId,
                                 timestamp: timestamp,
@@ -647,12 +662,12 @@ document.addEventListener('DOMContentLoaded', function() {
                             true,
                             chatType
                         );
-                        // Отправляем зашифрованное сообщение через WebSocket
                         chatSocket.send(JSON.stringify({
                             type: 'message',
                             content: encryptedData.content,
                             iv: encryptedData.iv,
-                            tag: encryptedData.tag
+                            tag: encryptedData.tag,
+                            urls: urls
                         }));
                     } catch (e) {
                         console.error('Encryption failed:', e);
@@ -660,7 +675,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         return;
                     }
                 } else {
-                    // Добавляем сообщение локально для нешифрованных чатов
+                    const urls = extractUrls(message);
+                    console.log('Sending message with URLs:', { message, urls });
                     addMessageToChat(
                         {
                             message: message,
@@ -673,7 +689,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         true,
                         chatType
                     );
-                    chatSocket.send(JSON.stringify({ type: 'message', content: message }));
+                    chatSocket.send(JSON.stringify({
+                        type: 'message',
+                        content: message,
+                        urls: urls
+                    }));
                 }
                 messageInput.value = '';
             }
@@ -713,7 +733,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const messagesContainer = document.querySelector('.messages-container');
             const existingMessage = messagesContainer.querySelector(`.message-row[data-message-id="${data.message_id}"]`);
             if (existingMessage) {
-                // Обновляем существующее сообщение
                 const messageTextElement = existingMessage.querySelector('.message-text');
                 if (messageTextElement) {
                     messageTextElement.textContent = data.message;
@@ -722,7 +741,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (readStatusElement) {
                     readStatusElement.textContent = data.is_read ? '✓✓' : '✓';
                 }
-                // Обновляем реальный message_id, если это было временное сообщение
                 if (data.message_id.startsWith('temp-')) {
                     existingMessage.dataset.messageId = data.message_id;
                 }

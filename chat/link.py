@@ -7,6 +7,7 @@ VIRUSTOTAL_URL_API = "https://www.virustotal.com/api/v3/urls"
 URLHAUS_API_URL = "https://urlhaus-api.abuse.ch/v1/url/"
 
 def validate_url(url: str) -> None:
+    print('checking: ', url)
     # 1. Проверка формата URL
     if not is_valid_url_format(url):
         raise ValidationError("Некорректный URL", code="invalid_url")

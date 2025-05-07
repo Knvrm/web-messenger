@@ -199,7 +199,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             );
                             window.sessionPrivateKey = new TextDecoder().decode(decrypted);
                             sessionStorage.setItem('sessionPrivateKey', window.sessionPrivateKey); // Сохраняем в sessionStorage
-                            debugMessage = `Private key decrypted, length: ${window.sessionPrivateKey.length}, starts with: ${window.sessionPrivateKey.slice(0, 20)}...`;
+                            //debugMessage = `Private key decrypted, length: ${window.sessionPrivateKey.length}, starts with: ${window.sessionPrivateKey.slice(0, 20)}...`;
                             console.log('Private key decrypted:', window.sessionPrivateKey ? 'Success' : 'Failed');
                         } catch (e) {
                             debugMessage = `Decryption error: ${e.message}`;

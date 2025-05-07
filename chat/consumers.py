@@ -46,44 +46,29 @@ class ChatConsumer(AsyncWebsocketConsumer):
             content = data.get('content', '').strip()
             iv = data.get('iv')
             tag = data.get('tag')
-            print(f"[{time.time()}] Parsed message: type={message_type}, content={content}, iv={iv}, tag={tag}")
+            urls = data.get('urls', [])
+            print(f"[{time.time()}] Parsed message: type={message_type}, content={content}, iv={iv}, tag={tag}, urls={urls}")
             if not content:
                 await self.send_error("Сообщение не может быть пустым")
                 return
 
-            # detector = PhishingDetector()
-            # try:
-            #     loop = asyncio.get_running_loop()
-            #     ml_result = await asyncio.wait_for(
-            #         loop.run_in_executor(
-            #             None,
-            #             lambda: detector.analyze_text(content)
-            #         ),
-            #         timeout=3.0
-            #     )
-            # except asyncio.TimeoutError:
-            #     print("ML анализ превысил таймаут, продолжаем базовые проверки")
-            # except Exception as e:
-            #     print(f"Ошибка ML анализа: {str(e)}")
-
-            urls = re.findall(r'https?://[^\s<>"]+|www\.[^\s<>"]+', content)
-            print(f"[{time.time()}] Checking for URLs in content: {content}")
+            # Проверка URL
             if urls:
+                print(f"Checking URLs: {urls}")
                 try:
                     loop = asyncio.get_running_loop()
                     url_checks = await asyncio.gather(*[
-                        loop.run_in_executor(
-                            None,
-                            lambda url=url: validate_url(url)
-                        )
+                        loop.run_in_executor(None, lambda url=url: validate_url(url))
                         for url in urls
                     ], return_exceptions=True)
 
                     for url, check_result in zip(urls, url_checks):
                         if isinstance(check_result, Exception):
+                            error_message = str(check_result)
+                            error_code = getattr(check_result, 'code', 'unknown')
                             await self.send_security_alert(
-                                "Обнаружена подозрительная ссылка",
-                                {"url": url, "error": str(check_result)},
+                                f"Обнаружена подозрительная ссылка: {url}",
+                                {"url": url, "error": error_message, "code": error_code},
                                 alert_type="malicious_url"
                             )
                             return
@@ -95,12 +80,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
                         alert_type="url_check_error"
                     )
                     return
+
             print(f"[{time.time()}] Saving message for user: {self.user.username}, content: {content}")
             message_obj = await self.save_message(self.user, content, iv, tag)
             print(f"[{time.time()}] Message saved: ID={message_obj.id}")
             print(f"[{time.time()}] Sending message to group: {self.room_group_name}")
             await self.send_message_to_chat(message_obj)
-            print(f"[{time.time()}] Sended message to group: {self.room_group_name}")
+            print(f"[{time.time()}] Sent message to group: {self.room_group_name}")
 
         except json.JSONDecodeError:
             await self.send_error("Неверный формат сообщения (ожидается JSON)")

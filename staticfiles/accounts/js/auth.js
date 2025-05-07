@@ -199,7 +199,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             );
                             window.sessionPrivateKey = new TextDecoder().decode(decrypted);
                             sessionStorage.setItem('sessionPrivateKey', window.sessionPrivateKey); // Сохраняем в sessionStorage
-                            debugMessage = `Private key decrypted, length: ${window.sessionPrivateKey.length}, starts with: ${window.sessionPrivateKey.slice(0, 20)}...`;
+                            //debugMessage = `Private key decrypted, length: ${window.sessionPrivateKey.length}, starts with: ${window.sessionPrivateKey.slice(0, 20)}...`;
                             console.log('Private key decrypted:', window.sessionPrivateKey ? 'Success' : 'Failed');
                         } catch (e) {
                             debugMessage = `Decryption error: ${e.message}`;
@@ -222,12 +222,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 console.log('Debug info:', response.debug || debugMessage);
-                alert(`Auth result: ${debugMessage}\nRedirecting in 3 seconds...`);
-
-                setTimeout(() => {
-                    console.log('Redirecting to:', redirectUrl);
-                    window.location.href = redirectUrl;
-                }, 3000);
+                window.location.href = redirectUrl; // Немедленный редирект
             },
             error: function(xhr) {
                 console.log('Auth code error:', xhr.status, xhr.responseText);
