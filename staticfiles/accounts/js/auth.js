@@ -1,7 +1,6 @@
 const verifyAuthUrl = '/accounts/verify-auth-code/';
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('auth.js loaded, jQuery:', typeof jQuery, 'verifyAuthUrl:', verifyAuthUrl);
 
     if (typeof jQuery === 'undefined') {
         console.error('jQuery not loaded');
@@ -18,7 +17,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 break;
             }
         }
-        console.log('CSRF token:', cookieValue || 'Not found');
+        //console.log('CSRF token:', cookieValue || 'Not found');
         if (!cookieValue) {
             console.error('CSRF token not found in cookies');
         }
@@ -35,9 +34,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     loginForm.on('submit', function(e) {
         e.preventDefault();
-        console.log('Login form submit event triggered');
+        //console.log('Login form submit event triggered');
         loginPassword = $('#id_password').val() || $('input[name="password"]').val();
-        console.log('Password saved, length:', loginPassword ? loginPassword.length : 'null');
+        //console.log('Password saved, length:', loginPassword ? loginPassword.length : 'null');
 
         const formData = $(this).serialize();
         const csrfToken = getCsrfToken();
@@ -106,7 +105,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        console.log('Submitting auth code:', enteredCode);
+        //console.log('Submitting auth code:', enteredCode);
         const csrfToken = getCsrfToken();
         if (!csrfToken) {
             showAlert('CSRF-токен не найден. Пожалуйста, обновите страницу.', 'danger');
@@ -122,7 +121,7 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             timeout: 10000,
             success: async function(response) {
-                console.log('Auth code response:', response);
+                //console.log('Auth code response:', response);
                 let redirectUrl = '/chat/';
                 let debugMessage = 'No debug info';
 
@@ -132,17 +131,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 }));
 
                 if (response.status === 'success') {
-                    console.log('Checking decryption prerequisites:', {
-                        hasPrivateKey: !!response.private_key,
-                        hasKeySalt: !!response.key_salt,
-                        hasPassword: !!loginPassword
-                    });
 
                     if (response.private_key && response.key_salt && loginPassword) {
                         try {
-                            console.log('Attempting to decrypt private key');
+                            //console.log('Attempting to decrypt private key');
                             const cleanedPrivateKey = response.private_key.replace(/\s/g, '');
-                            console.log('Private key length:', cleanedPrivateKey.length);
+                            //console.log('Private key length:', cleanedPrivateKey.length);
 
                             const isValidBase64 = (str) => {
                                 try {
@@ -185,7 +179,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             );
 
                             const encryptedKey = new Uint8Array(atob(cleanedPrivateKey).split('').map(c => c.charCodeAt(0)));
-                            console.log('Encrypted key length:', encryptedKey.length);
+                            //console.log('Encrypted key length:', encryptedKey.length);
                             const iv = encryptedKey.slice(0, 12);
                             const data = encryptedKey.slice(12);
                             const decrypted = await crypto.subtle.decrypt(
@@ -200,7 +194,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             window.sessionPrivateKey = new TextDecoder().decode(decrypted);
                             sessionStorage.setItem('sessionPrivateKey', window.sessionPrivateKey); // Сохраняем в sessionStorage
                             //debugMessage = `Private key decrypted, length: ${window.sessionPrivateKey.length}, starts with: ${window.sessionPrivateKey.slice(0, 20)}...`;
-                            console.log('Private key decrypted:', window.sessionPrivateKey ? 'Success' : 'Failed');
+                            //console.log('Private key decrypted:', window.sessionPrivateKey ? 'Success' : 'Failed');
                         } catch (e) {
                             debugMessage = `Decryption error: ${e.message}`;
                             console.error('Decryption error:', e);
@@ -208,11 +202,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                     } else {
                         debugMessage = `Missing: private_key=${!!response.private_key}, key_salt=${!!response.key_salt}, password=${!!loginPassword}`;
-                        console.log('Missing decryption prerequisites:', {
-                            private_key: !!response.private_key,
-                            key_salt: !!response.key_salt,
-                            password: !!loginPassword
-                        });
                         showAlert('Недостаточно данных для расшифровки ключа.', 'danger');
                     }
                     redirectUrl = response.redirect || redirectUrl;
@@ -221,7 +210,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     showAlert(response.message, 'danger');
                 }
 
-                console.log('Debug info:', response.debug || debugMessage);
+                //console.log('Debug info:', response.debug || debugMessage);
                 window.location.href = redirectUrl; // Немедленный редирект
             },
             error: function(xhr) {

@@ -1,5 +1,216 @@
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Chat app initialized');
+    //console.log('Chat app initialized');
+
+    // --- ML-модель и Web Worker ---
+    let phishingDetector = null;
+    let modelWorker = null;
+    const analysisCache = new Map();
+
+    async function initPhishingDetector() {
+        console.log('Initializing phishing detector');
+        const modelLoading = document.getElementById('modelLoading');
+        if (modelLoading) modelLoading.style.display = 'block';
+
+        try {
+            // Создаём Web Worker
+            modelWorker = new Worker(URL.createObjectURL(new Blob([`
+                console.log('Worker starting, attempting to load transformers.min.js as module');
+                let transformers = null;
+
+                async function loadTransformers() {
+                    try {
+                        transformers = await import('https://mymessenger.local:8443/static/chat/js/transformers.min.js');
+                        console.log('transformers.min.js loaded successfully as module');
+                    } catch (e) {
+                        console.error('Failed to load transformers.min.js:', e);
+                        postMessage({ type: 'error', error: 'Failed to load transformers.min.js: ' + e.message });
+                        throw e;
+                    }
+                }
+
+                let model = null;
+                let tokenizer = null;
+
+                async function initModel() {
+                    try {
+                        await loadTransformers();
+                        console.log('Loading Transformers.js v3.5.1 in Worker');
+                        if (!transformers) {
+                            throw new Error('Transformers.js not loaded');
+                        }
+                        console.log('Loading tokenizer');
+                        tokenizer = await transformers.AutoTokenizer.from_pretrained(
+                            'cybersectony/phishing-email-detection-distilbert_v2.4.1'
+                        );
+                        console.log('Loading model');
+                        model = await transformers.AutoModelForSequenceClassification.from_pretrained(
+                            'cybersectony/phishing-email-detection-distilbert_v2.4.1'
+                        );
+                        postMessage({ type: 'modelLoaded' });
+                    } catch (e) {
+                        console.error('Model initialization error:', e);
+                        postMessage({ type: 'error', error: 'Failed to load model: ' + e.message });
+                    }
+                }
+
+                async function analyzeText(inputs) {
+                    try {
+                        console.log('Running model inference');
+                        const outputs = await model(inputs);
+                        const probs = transformers.softmax(outputs.logits, -1)[0];
+                        const predClass = probs.indexOf(Math.max(...probs));
+                        const maxProb = probs[predClass];
+                        postMessage({ type: 'result', predClass, maxProb });
+                    } catch (e) {
+                        console.error('Inference error:', e);
+                        postMessage({ type: 'error', error: 'Inference error: ' + e.message });
+                    }
+                }
+
+                self.onmessage = async function(e) {
+                    const { type, text } = e.data;
+                    if (type === 'init') {
+                        console.log('Initializing model in Worker');
+                        await initModel();
+                    } else if (type === 'analyze') {
+                        console.log('Tokenizing text:', text.slice(0, 50));
+                        const inputs = await tokenizer(text, {
+                            truncation: true,
+                            max_length: 256,
+                            padding: true,
+                            return_tensors: 'pt'
+                        });
+                        await analyzeText(inputs);
+                    }
+                };
+            `], { type: 'text/javascript' })), { type: 'module' });
+
+            // Обработка сообщений от Web Worker
+            return new Promise((resolve, reject) => {
+                modelWorker.onmessage = function(e) {
+                    const { type, predClass, maxProb, error } = e.data;
+                    if (type === 'modelLoaded') {
+                        console.log('Phishing model loaded successfully');
+                        if (modelLoading) modelLoading.style.display = 'none';
+                        resolve();
+                    } else if (type === 'result') {
+                        console.log('Received analysis result:', { predClass, maxProb });
+                        phishingDetector.resolveResult(predClass, maxProb);
+                    } else if (type === 'error') {
+                        console.error('Worker error:', error);
+                        if (modelLoading) modelLoading.style.display = 'none';
+                        reject(new Error(error));
+                    }
+                };
+                modelWorker.onerror = function(e) {
+                    console.error('Worker error:', e);
+                    if (modelLoading) modelLoading.style.display = 'none';
+                    reject(new Error('Worker error: ' + e.message));
+                };
+                modelWorker.postMessage({ type: 'init' });
+            });
+        } catch (e) {
+            console.error('Failed to initialize phishing detector:', e);
+            if (modelLoading) modelLoading.style.display = 'none';
+            return false; // Продолжаем без модели
+        }
+    }
+
+    const phishingDetectorImpl = {
+        phishingKeywords: [
+            'заблокирован', 'срочно', 'verify', 'account', 'password',
+            'карта', 'click here', 'требует', 'подтвердите', 'urgent',
+            'invoice', 'payment', 'требуется', 'обновить', 'security'
+        ],
+        safeKeywords: [
+            'добрый день', 'прикрепляю', 'документ', 'отчет',
+            'коллега', 'проект', 'уведомление', 'встреча',
+            'совещание', 'документ', 'проверьте', 'отчет'
+        ],
+
+        preprocessText(text) {
+            text = text.toLowerCase().trim();
+            text = text.replace(/[^\w\s@./-]/g, '');
+            return text;
+        },
+
+        async analyzeText(text) {
+            const cacheKey = text.slice(0, 100);
+            if (analysisCache.has(cacheKey)) {
+                return analysisCache.get(cacheKey);
+            }
+
+            try {
+                const cleanText = this.preprocessText(text);
+                const originalText = text.toLowerCase();
+                const hasUrl = /(https?:\/\/\S+|www\.\S+)/i.test(originalText);
+                const hasPhishingKw = this.phishingKeywords.some(kw => cleanText.includes(kw));
+                const hasSafeKw = this.safeKeywords.some(kw => cleanText.includes(kw));
+
+                return new Promise((resolve) => {
+                    this.resolveResult = (predClass, maxProb) => {
+                        const classMapping = {
+                            0: 'phishing',
+                            1: 'phishing_url',
+                            2: 'legitimate',
+                            3: 'legitimate_url'
+                        };
+                        const label = classMapping[predClass];
+                        let isPhishing = label.includes('phishing');
+                        let confidence = maxProb;
+                        let reason = label;
+
+                        if (isPhishing) {
+                            if (hasSafeKw && !hasUrl) {
+                                isPhishing = false;
+                                confidence = Math.max(0.1, confidence - 0.3);
+                                reason = 'safe_keyword_override';
+                            } else if (hasUrl && hasPhishingKw) {
+                                confidence = Math.min(1.0, confidence + 0.15);
+                            }
+                        } else {
+                            if (hasUrl && hasPhishingKw) {
+                                isPhishing = true;
+                                confidence = Math.max(confidence, 0.85);
+                                reason = 'url_with_phishing_keywords';
+                            }
+                        }
+
+                        const result = {
+                            is_phishing: isPhishing,
+                            reason,
+                            confidence: Number(confidence.toFixed(4)),
+                            details: {
+                                text_sample: cleanText.slice(0, 100) + (cleanText.length > 100 ? '...' : ''),
+                                has_url: hasUrl,
+                                has_phishing_keywords: hasPhishingKw,
+                                has_safe_keywords: hasSafeKw,
+                                model_label: label,
+                                model_confidence: maxProb
+                            }
+                        };
+
+                        analysisCache.set(cacheKey, result);
+                        if (analysisCache.size > 1000) {
+                            analysisCache.delete(analysisCache.keys().next().value);
+                        }
+
+                        resolve(result);
+                    };
+
+                    modelWorker.postMessage({ type: 'analyze', text: cleanText });
+                });
+            } catch (e) {
+                console.error('Phishing analysis error:', e);
+                return {
+                    is_phishing: false,
+                    reason: 'error',
+                    confidence: 0.0,
+                    details: { error: true, message: 'Ошибка при анализе текста' }
+                };
+            }
+        }
+    };
 
     // --- Проверка и расшифровка приватного ключа ---
     async function checkPrivateKey() {
@@ -633,6 +844,34 @@ document.addEventListener('DOMContentLoaded', function() {
             if (message && chatSocket.readyState === WebSocket.OPEN) {
                 if (chatType === 'DM' || chatType === 'GM') {
                     try {
+                        // Проверка на фишинг
+                        if (phishingDetector) {
+                            const result = await phishingDetector.analyzeText(message);
+                            console.log('Phishing analysis result:', result);
+                            if (result.is_phishing && result.confidence > 0.7) {
+                                const details = `Причина: ${result.reason}, Уверенность: ${(result.confidence * 100).toFixed(1)}%` +
+                                    (result.details.has_url ? ', Обнаружен URL' : '') +
+                                    (result.details.has_phishing_keywords ? ', Ключевые слова фишинга' : '');
+                                showSecurityAlert(
+                                    'Обнаружено потенциально опасное сообщение!',
+                                    details,
+                                    'phishing_detected'
+                                );
+                                chatSocket.send(JSON.stringify({
+                                    type: 'phishing_alert',
+                                    message_id: crypto.randomUUID(),
+                                    confidence: result.confidence,
+                                    reason: result.reason,
+                                    has_url: result.details.has_url,
+                                    details: {
+                                        has_phishing_keywords: result.details.has_phishing_keywords,
+                                        has_safe_keywords: result.details.has_safe_keywords
+                                    }
+                                }));
+                                return;
+                            }
+                        }
+
                         const urls = extractUrls(message);
                         console.log('Sending message with URLs:', { message, urls });
                         const encryptedData = await encryptMessage(message, sessionKey);
@@ -673,8 +912,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const messageEl = document.getElementById('securityAlertMessage');
             const detailsEl = document.getElementById('securityAlertDetails');
             const reportBtn = document.getElementById('reportLinkButton');
+            const phishingBlockMessage = document.getElementById('phishingBlockMessage');
 
-            if (!messageEl || !detailsEl || !reportBtn) {
+            if (!messageEl || !detailsEl || !reportBtn || !phishingBlockMessage) {
                 console.error('Security alert modal elements missing');
                 alert(`${message}\nПричина: ${details}`);
                 return;
@@ -684,8 +924,9 @@ document.addEventListener('DOMContentLoaded', function() {
             detailsEl.textContent = details;
             messageEl.className = 'mb-2';
             reportBtn.style.display = 'inline-block';
+            phishingBlockMessage.style.display = alertType === 'phishing_detected' ? 'block' : 'none';
 
-            if (alertType === 'malicious_url') {
+            if (alertType === 'malicious_url' || alertType === 'phishing_detected') {
                 messageEl.classList.add('text-danger');
             } else if (alertType === 'suspicious_url') {
                 messageEl.classList.add('text-warning');
@@ -699,7 +940,6 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('Showing security modal with:', { message, details, alertType });
             modal.show();
         }
-
 
         async function loadInitialMessages(chatId, sessionKey, chatType) {
             const messages = document.querySelectorAll('.message-row');
@@ -1083,6 +1323,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // --- Инициализация ---
     async function init() {
         if (await checkPrivateKey()) {
+            try {
+                phishingDetector = phishingDetectorImpl;
+                await initPhishingDetector();
+            } catch (e) {
+                console.error('Phishing detector initialization failed:', e);
+                // Продолжаем без модели
+                phishingDetector = null;
+            }
             chatApp.init();
             initWebSocket();
             initUI();
