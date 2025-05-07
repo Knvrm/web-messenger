@@ -562,17 +562,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             console.error('Failed to decrypt message:', e);
                             messageText = '[Ошибка расшифровки]';
                         }
-                    } else {
-                        console.warn('No encryption data provided or invalid chat type:', {
-                            content: data.message,
-                            iv: data.iv,
-                            tag: data.tag,
-                            chatType
-                        });
                     }
-                    if (!isCurrentUser) {
-                        addMessageToChat({ ...data, message: messageText }, isCurrentUser, chatType);
-                    }
+                    addMessageToChat({ ...data, message: messageText }, isCurrentUser, chatType);
                 } else if (data.type === 'history') {
                     const messagesContainer = document.querySelector('.messages-container');
                     messagesContainer.innerHTML = '';
@@ -595,12 +586,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                 console.error('Failed to decrypt history message:', e);
                                 messageText = '[Ошибка расшифровки]';
                             }
-                        } else {
-                            console.warn('No encryption data for history message:', {
-                                content: msg.content,
-                                iv: msg.iv,
-                                tag: msg.tag
-                            });
                         }
                         addMessageToChat(
                             {
@@ -611,30 +596,34 @@ document.addEventListener('DOMContentLoaded', function() {
                                 iv: msg.iv,
                                 tag: msg.tag,
                                 timestamp: msg.timestamp,
-                                is_read: msg.is_read
+                                is_read: msg.is_read,
+                                is_suspicious: msg.is_suspicious || false
                             },
                             isCurrentUser,
                             chatType
                         );
                     }
                 } else if (data.type === 'security_alert') {
-                    alert(`Предупреждение: ${data.message}\nДетали: ${JSON.stringify(data.details)}`);
-                    console.warn('Security alert received:', data);
+                    console.log('Showing security alert:', data);
+                    showSecurityAlert(data.message, data.details.reason || JSON.stringify(data.details), data.alert_type);
                 } else if (data.type === 'error') {
-                    alert(`Ошибка: ${data.error}\nДетали: ${JSON.stringify(data.details)}`);
                     console.error('Error received:', data);
+                    showSecurityAlert(`Ошибка: ${data.error}`, JSON.stringify(data.details), 'error');
                 }
             } catch (error) {
                 console.error('Error parsing message:', error);
+                showSecurityAlert('Ошибка обработки сообщения', error.message, 'error');
             }
         };
 
         chatSocket.onerror = function(error) {
             console.error('WebSocket Error:', error);
+            showSecurityAlert('Ошибка WebSocket', 'Не удалось установить соединение.', 'error');
         };
 
         chatSocket.onclose = function() {
             console.log('WebSocket disconnected');
+            showSecurityAlert('Соединение закрыто', 'WebSocket-соединение было разорвано.', 'error');
         };
 
         messageForm.addEventListener('submit', async function(e) {
@@ -642,27 +631,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const message = messageInput.value.trim();
 
             if (message && chatSocket.readyState === WebSocket.OPEN) {
-                const timestamp = new Date().toISOString();
-                const tempMessageId = `temp-${Date.now()}`;
                 if (chatType === 'DM' || chatType === 'GM') {
                     try {
                         const urls = extractUrls(message);
-
                         console.log('Sending message with URLs:', { message, urls });
                         const encryptedData = await encryptMessage(message, sessionKey);
                         console.log('Encrypted data:', encryptedData);
-                        addMessageToChat(
-                            {
-                                message: message,
-                                sender: 'You',
-                                sender_id: document.body.dataset.currentUserId,
-                                message_id: tempMessageId,
-                                timestamp: timestamp,
-                                is_read: false
-                            },
-                            true,
-                            chatType
-                        );
                         chatSocket.send(JSON.stringify({
                             type: 'message',
                             content: encryptedData.content,
@@ -672,24 +646,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         }));
                     } catch (e) {
                         console.error('Encryption failed:', e);
-                        alert('Ошибка шифрования сообщения');
+                        showSecurityAlert('Ошибка шифрования', 'Не удалось зашифровать сообщение.', 'error');
                         return;
                     }
                 } else {
                     const urls = extractUrls(message);
                     console.log('Sending message with URLs:', { message, urls });
-                    addMessageToChat(
-                        {
-                            message: message,
-                            sender: 'You',
-                            sender_id: document.body.dataset.currentUserId,
-                            message_id: tempMessageId,
-                            timestamp: timestamp,
-                            is_read: false
-                        },
-                        true,
-                        chatType
-                    );
                     chatSocket.send(JSON.stringify({
                         type: 'message',
                         content: message,
@@ -700,6 +662,45 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
+        function showSecurityAlert(message, details, alertType) {
+            const modalEl = document.getElementById('securityAlertModal');
+            if (!modalEl) {
+                console.error('Security alert modal not found');
+                alert(`${message}\nПричина: ${details}`);
+                return;
+            }
+            const modal = new bootstrap.Modal(modalEl);
+            const messageEl = document.getElementById('securityAlertMessage');
+            const detailsEl = document.getElementById('securityAlertDetails');
+            const reportBtn = document.getElementById('reportLinkButton');
+
+            if (!messageEl || !detailsEl || !reportBtn) {
+                console.error('Security alert modal elements missing');
+                alert(`${message}\nПричина: ${details}`);
+                return;
+            }
+
+            messageEl.textContent = message;
+            detailsEl.textContent = details;
+            messageEl.className = 'mb-2';
+            reportBtn.style.display = 'inline-block';
+
+            if (alertType === 'malicious_url') {
+                messageEl.classList.add('text-danger');
+            } else if (alertType === 'suspicious_url') {
+                messageEl.classList.add('text-warning');
+            } else if (alertType === 'user_restricted') {
+                messageEl.classList.add('text-danger');
+                reportBtn.style.display = 'none';
+            } else {
+                messageEl.classList.add('text-info');
+            }
+
+            console.log('Showing security modal with:', { message, details, alertType });
+            modal.show();
+        }
+
+
         async function loadInitialMessages(chatId, sessionKey, chatType) {
             const messages = document.querySelectorAll('.message-row');
             for (const message of messages) {
@@ -709,6 +710,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const tag = message.dataset.tag;
                 const senderId = message.dataset.senderId;
                 const isCurrentUser = senderId === document.body.dataset.currentUserId;
+                const isSuspicious = message.dataset.isSuspicious === 'true';
 
                 let messageText = 'Encrypted';
                 if ((chatType === 'DM' || chatType === 'GM') && encryptedContent && iv && tag) {
@@ -727,10 +729,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (messageTextElement) {
                     messageTextElement.textContent = messageText;
                 }
+                if (isSuspicious) {
+                    message.classList.add('suspicious-message');
+                }
             }
         }
 
         function addMessageToChat(data, isCurrentUser, chatType) {
+            console.log('Adding message to chat:', { data, isCurrentUser, chatType });
             const messagesContainer = document.querySelector('.messages-container');
             const existingMessage = messagesContainer.querySelector(`.message-row[data-message-id="${data.message_id}"]`);
             if (existingMessage) {
@@ -742,17 +748,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (readStatusElement) {
                     readStatusElement.textContent = data.is_read ? '✓✓' : '✓';
                 }
-                if (data.message_id.startsWith('temp-')) {
-                    existingMessage.dataset.messageId = data.message_id;
-                }
                 return;
             }
 
             const messageClass = isCurrentUser ? 'sent' : 'received';
             const senderInitial = data.sender ? data.sender.charAt(0).toUpperCase() : 'U';
+            const suspiciousClass = data.is_suspicious ? 'suspicious-message' : '';
 
             const messageElement = `
-                <div class="message-row ${messageClass}" data-message-id="${data.message_id}" data-sender-id="${data.sender_id}">
+                <div class="message-row ${messageClass} ${suspiciousClass}" data-message-id="${data.message_id}" data-sender-id="${data.sender_id}" data-is-suspicious="${data.is_suspicious}">
                     ${!isCurrentUser ? `
                     <div class="message-avatar">
                         <div class="user-avatar">
@@ -783,6 +787,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </span>
                                 ` : ''}
                             </div>
+                            ${data.is_suspicious ? `
+                            <div class="suspicious-label text-warning mt-1">
+                                Подозрительное сообщение
+                            </div>
+                            ` : ''}
                         </div>
                     </div>
                 </div>
@@ -1037,6 +1046,38 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
         setInterval(updateMessageTimes, 60000);
+
+        // Обработчик кнопки "Пожаловаться" в модальном окне
+        const reportLinkButton = document.getElementById('reportLinkButton');
+        if (reportLinkButton) {
+            reportLinkButton.addEventListener('click', async function() {
+                const detailsEl = document.getElementById('securityAlertDetails');
+                const details = detailsEl.textContent;
+                try {
+                    const response = await fetch('/chat/report-link/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': document.querySelector('.chat-header').dataset.csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ details: details })
+                    });
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        alert('Жалоба отправлена. Спасибо за ваш вклад в безопасность!');
+                    } else {
+                        throw new Error(data.message || 'Не удалось отправить жалобу');
+                    }
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('securityAlertModal'));
+                    modal.hide();
+                } catch (error) {
+                    console.error('Error reporting link:', error);
+                    alert('Ошибка при отправке жалобы: ' + error.message);
+                }
+            });
+        }
     }
 
     // --- Инициализация ---

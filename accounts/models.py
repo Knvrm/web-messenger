@@ -46,6 +46,9 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     public_key = models.TextField(blank=True, null=True)
     private_key = models.TextField(blank=True, null=True)
     key_salt = models.BinaryField(max_length=16, blank=True, null=True)
+    suspicious_links_count = models.IntegerField(default=0)  # Счётчик подозрительных ссылок
+    last_suspicious_link_at = models.DateTimeField(null=True, blank=True)  # Время последнего нарушения
+    link_restriction_until = models.DateTimeField(null=True, blank=True)  # Ограничение на отправку ссылок
 
     objects = CustomUserManager()
 

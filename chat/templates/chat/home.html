@@ -231,7 +231,8 @@
                      data-encrypted-content="{{ message.content|escape }}"
                      data-iv="{{ message.iv|escape }}"
                      data-tag="{{ message.tag|escape }}"
-                     data-sender-id="{{ message.sender.id }}">
+                     data-sender-id="{{ message.sender.id }}"
+                     data-is-suspicious="{{ message.is_suspicious|yesno:'true,false' }}">
                     {% if message.sender != request.user %}
                     <div class="message-avatar">
                         <div class="user-avatar">
@@ -381,6 +382,24 @@
                         </div>
                         <button type="submit" class="btn btn-primary">Подтвердить</button>
                     </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="securityAlertModal" tabindex="-1" aria-labelledby="securityAlertModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="securityAlertModalLabel">Предупреждение безопасности</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="securityAlertMessage" class="mb-2"></p>
+                    <p><strong>Причина:</strong> <span id="securityAlertDetails"></span></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                    <button type="button" class="btn btn-warning" id="reportLinkButton">Пожаловаться</button>
                 </div>
             </div>
         </div>

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import ChatRoom, Message
+from .models import ChatRoom, Message, SuspiciousLinkLog
 
 @admin.register(ChatRoom)
 class ChatRoomAdmin(admin.ModelAdmin):
@@ -15,12 +15,20 @@ class ChatRoomAdmin(admin.ModelAdmin):
 
 @admin.register(Message)
 class MessageAdmin(admin.ModelAdmin):
-    list_display = ['id', 'room', 'sender', 'content_preview', 'iv', 'tag', 'timestamp', 'is_read']
-    list_filter = ['room', 'sender', 'is_read']
+    list_display = ['id', 'room', 'sender', 'content_preview', 'iv', 'tag', 'timestamp', 'is_read', 'is_suspicious']
+    list_filter = ['room', 'sender', 'is_read', 'is_suspicious']
     search_fields = ['content', 'sender__username']
-    readonly_fields = ['iv', 'tag', 'timestamp']
+    readonly_fields = ['iv', 'tag', 'timestamp', 'is_suspicious']
 
     def content_preview(self, obj):
         """Отображает первые 60 символов содержимого сообщения"""
         return obj.content[:60] + ('...' if len(obj.content) > 60 else '')
     content_preview.short_description = 'Content'
+
+@admin.register(SuspiciousLinkLog)
+class SuspiciousLinkLogAdmin(admin.ModelAdmin):
+    list_display = ('user', 'url', 'timestamp', 'reason', 'is_malicious')
+    list_filter = ('timestamp', 'is_malicious')
+    search_fields = ('user__username', 'url', 'reason')
+    readonly_fields = ('timestamp',)
+    date_hierarchy = 'timestamp'

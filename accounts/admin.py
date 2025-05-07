@@ -25,7 +25,7 @@ class CustomUserAdminForm(forms.ModelForm):
         password1 = self.cleaned_data.get('password1')
         if password1:
             user.set_password(password1)
-            user.generate_rsa_keys(password1)  # Генерация ключей при создании/изменении пароля
+            user.generate_rsa_keys(password1)
         if commit:
             user.save()
         return user
@@ -33,8 +33,8 @@ class CustomUserAdminForm(forms.ModelForm):
 @admin.register(CustomUser)
 class CustomUserAdmin(admin.ModelAdmin):
     form = CustomUserAdminForm
-    list_display = ('username', 'email', 'first_name', 'last_name', 'is_active', 'is_staff', 'has_keys')
-    list_filter = ('is_active', 'is_staff', 'is_superuser')
+    list_display = ('username', 'email', 'first_name', 'last_name', 'is_active', 'is_staff', 'has_keys', 'suspicious_links_count', 'link_restriction_until')
+    list_filter = ('is_active', 'is_staff', 'is_superuser', 'link_restriction_until')
     search_fields = ('username', 'email', 'first_name', 'last_name')
     ordering = ('username',)
     readonly_fields = ('password_hash', 'salt', 'public_key', 'private_key', 'key_salt')
@@ -42,6 +42,7 @@ class CustomUserAdmin(admin.ModelAdmin):
         (None, {'fields': ('email', 'username', 'first_name', 'last_name')}),
         ('Пароль', {'fields': ('password_hash', 'salt')}),
         ('Ключи RSA', {'fields': ('public_key', 'private_key', 'key_salt')}),
+        ('Безопасность', {'fields': ('suspicious_links_count', 'last_suspicious_link_at', 'link_restriction_until')}),
         ('Права', {'fields': ('is_active', 'is_staff', 'is_superuser')}),
     )
     add_fieldsets = (
@@ -50,7 +51,7 @@ class CustomUserAdmin(admin.ModelAdmin):
             'fields': ('email', 'username', 'first_name', 'last_name', 'password1', 'password2', 'is_active', 'is_staff', 'is_superuser'),
         }),
     )
-    actions = ['force_delete_users']
+    actions = ['force_delete_users', 'remove_link_restriction']
 
     def has_keys(self, obj):
         return bool(obj.public_key and obj.private_key and obj.key_salt)
@@ -70,6 +71,21 @@ class CustomUserAdmin(admin.ModelAdmin):
         )
 
     force_delete_users.short_description = "Полное удаление (включая связанные данные)"
+
+    def remove_link_restriction(self, request, queryset):
+        updated_count = 0
+        for user in queryset:
+            if user.link_restriction_until:
+                user.link_restriction_until = None
+                user.suspicious_links_count = 0  # Обнуляем для удобства тестирования
+                user.save()
+                updated_count += 1
+        self.message_user(
+            request,
+            f"Ограничения на отправку ссылок сняты для {updated_count} пользователей"
+        )
+
+    remove_link_restriction.short_description = "Снять ограничения на отправку ссылок"
 
 @admin.register(EmailConfirmation)
 class EmailConfirmationAdmin(admin.ModelAdmin):
