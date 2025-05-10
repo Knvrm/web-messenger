@@ -1,5 +1,9 @@
+from datetime import timedelta
+
 from django.contrib import admin
 from django import forms
+from django.utils import timezone
+from chat.models import SecurityLog
 from .models import CustomUser, EmailConfirmation
 
 class CustomUserAdminForm(forms.ModelForm):
@@ -33,7 +37,7 @@ class CustomUserAdminForm(forms.ModelForm):
 @admin.register(CustomUser)
 class CustomUserAdmin(admin.ModelAdmin):
     form = CustomUserAdminForm
-    list_display = ('username', 'email', 'first_name', 'last_name', 'is_active', 'is_staff', 'has_keys', 'suspicious_links_count', 'link_restriction_until')
+    list_display = ('username', 'email', 'first_name', 'last_name', 'is_active', 'is_staff', 'is_restricted', 'has_keys', 'suspicious_links_count', 'link_restriction_until')
     list_filter = ('is_active', 'is_staff', 'is_superuser', 'link_restriction_until')
     search_fields = ('username', 'email', 'first_name', 'last_name')
     ordering = ('username',)
@@ -52,6 +56,19 @@ class CustomUserAdmin(admin.ModelAdmin):
         }),
     )
     actions = ['force_delete_users', 'remove_link_restriction']
+
+    def is_restricted(self, obj):
+        """Проверяет, заблокирован ли пользователь (не может отправлять сообщения)."""
+        one_hour_ago = timezone.now() - timedelta(hours=1)
+        malicious_count = SecurityLog.objects.filter(
+            user=obj,
+            checked_at__gte=one_hour_ago,
+            is_malicious=True
+        ).count()
+        return malicious_count >= 3
+
+    is_restricted.boolean = True
+    is_restricted.short_description = 'Заблокирован'
 
     def has_keys(self, obj):
         return bool(obj.public_key and obj.private_key and obj.key_salt)
@@ -74,18 +91,26 @@ class CustomUserAdmin(admin.ModelAdmin):
 
     def remove_link_restriction(self, request, queryset):
         updated_count = 0
+        one_hour_ago = timezone.now() - timedelta(hours=1)
         for user in queryset:
-            if user.link_restriction_until:
+            # Сбрасываем подозрительные логи за последний час
+            SecurityLog.objects.filter(
+                user=user,
+                checked_at__gte=one_hour_ago,
+                is_malicious=True
+            ).delete()
+            # Сбрасываем поля в CustomUser, если они используются
+            if user.link_restriction_until or user.suspicious_links_count > 0:
                 user.link_restriction_until = None
-                user.suspicious_links_count = 0  # Обнуляем для удобства тестирования
+                user.suspicious_links_count = 0
                 user.save()
                 updated_count += 1
         self.message_user(
             request,
-            f"Ограничения на отправку ссылок сняты для {updated_count} пользователей"
+            f"Ограничения на отправку сообщений сняты для {updated_count} пользователей"
         )
 
-    remove_link_restriction.short_description = "Снять ограничения на отправку ссылок"
+    remove_link_restriction.short_description = "Снять ограничения на отправку сообщений"
 
 @admin.register(EmailConfirmation)
 class EmailConfirmationAdmin(admin.ModelAdmin):

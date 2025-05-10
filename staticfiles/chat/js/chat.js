@@ -149,16 +149,13 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     async function initPhishingDetector() {
-        console.log('Initializing phishing detector');
+        //console.log('Initializing phishing detector');
         const modelLoading = document.getElementById('modelLoading');
         if (modelLoading) modelLoading.style.display = 'block';
 
         try {
             console.log('Phishing detector setup completed');
             if (modelLoading) modelLoading.style.display = 'none';
-
-            console.log('Testing phishing detector');
-            await phishingDetector.analyzeText("This is a test message to check phishing detection.");
             return true;
         } catch (e) {
             console.error('Failed to initialize phishing detector:', e);
@@ -669,6 +666,52 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    const sidebarToggle = document.getElementById('sidebarToggle');
+    const sidebarMenu = document.getElementById('sidebarMenu');
+
+    if (sidebarToggle && sidebarMenu) {
+        // Показываем/скрываем меню по клику на гамбургер
+        sidebarToggle.addEventListener('click', function(e) {
+            e.stopPropagation();
+            sidebarMenu.style.display = sidebarMenu.style.display === 'block' ? 'none' : 'block';
+        });
+
+        // Скрываем меню при клике вне его
+        document.addEventListener('click', function() {
+            sidebarMenu.style.display = 'none';
+        });
+
+        // Предотвращаем закрытие при клике внутри меню
+        sidebarMenu.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+    } else {
+        console.warn('Sidebar elements (#sidebarToggle or #sidebarMenu) not found');
+    }
+
+    // Логика поиска по чатам
+    const searchInput = document.querySelector('.search-input');
+    const chatItems = document.querySelectorAll('.chat-item');
+
+    if (searchInput && chatItems.length > 0) {
+        searchInput.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+
+            chatItems.forEach(item => {
+                const chatName = item.querySelector('.chat-info h4')?.textContent.toLowerCase() || '';
+                const lastMessage = item.querySelector('.last-message')?.textContent.toLowerCase() || '';
+
+                if (chatName.includes(searchTerm) || lastMessage.includes(searchTerm)) {
+                    item.style.display = 'flex';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        });
+    } else {
+        console.warn('Search input (.search-input) or chat items (.chat-item) not found');
+    }
+
     async function initWebSocket() {
         const chatHeader = document.querySelector('.chat-header');
         if (!chatHeader) return;
@@ -698,9 +741,17 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('WebSocket connected');
         };
 
+        let isUserRestricted = false;
+
         chatSocket.onmessage = async function(e) {
             try {
                 const data = JSON.parse(e.data);
+                if (data.type === 'security_alert') {
+                    if (data.alert_type === 'user_restricted') {
+                        isUserRestricted = true; // Установить флаг блокировки
+                    }
+                    showSecurityAlert(data.message, data.details, data.alert_type);
+                }
                 //console.log('WebSocket message received:', data);
                 if (data.type === 'new_message') {
                     let messageText = '[Зашифрованное сообщение]';
@@ -848,44 +899,46 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        function showSecurityAlert(message, details, alertType) {
+        function showSecurityAlert(message, details = {}, alertType = 'generic') {
             const modalEl = document.getElementById('securityAlertModal');
-            if (!modalEl) {
-                console.error('Security alert modal not found');
-                alert(`${message}\nПричина: ${details}`);
-                return;
-            }
-            const modal = new bootstrap.Modal(modalEl);
             const messageEl = document.getElementById('securityAlertMessage');
             const detailsEl = document.getElementById('securityAlertDetails');
             const reportBtn = document.getElementById('reportLinkButton');
             const phishingBlockMessage = document.getElementById('phishingBlockMessage');
 
-            if (!messageEl || !detailsEl || !reportBtn || !phishingBlockMessage) {
+            if (!modalEl || !messageEl || !detailsEl || !reportBtn || !phishingBlockMessage) {
                 console.error('Security alert modal elements missing');
-                alert(`${message}\nПричина: ${details}`);
                 return;
             }
 
+            // Очистка предыдущего содержимого
             messageEl.textContent = message;
-            detailsEl.textContent = details;
-            messageEl.className = 'mb-2';
-            reportBtn.style.display = 'inline-block';
+            detailsEl.textContent = typeof details === 'object' ? JSON.stringify(details, null, 2) : details;
             phishingBlockMessage.style.display = alertType === 'phishing_detected' ? 'block' : 'none';
 
-            if (alertType === 'malicious_url' || alertType === 'phishing_detected') {
-                messageEl.classList.add('text-danger');
-            } else if (alertType === 'suspicious_url') {
-                messageEl.classList.add('text-warning');
-            } else if (alertType === 'user_restricted') {
-                messageEl.classList.add('text-danger');
-                reportBtn.style.display = 'none';
-            } else {
-                messageEl.classList.add('text-info');
-            }
+            // Инициализация модального окна
+            const modal = new bootstrap.Modal(modalEl, {
+                backdrop: true,
+                keyboard: true
+            });
 
-            console.log('Showing security modal with:', { message, details, alertType });
+            // Удаление всех существующих backdrop перед открытием
+            document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+
+            // Открытие модального окна
             modal.show();
+
+            // Обработчик события закрытия модального окна
+            modalEl.addEventListener('hidden.bs.modal', function handleModalHidden() {
+                // Удаление backdrop
+                document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+                // Очистка стилей у body
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+                // Удаляем обработчик, чтобы избежать накопления
+                modalEl.removeEventListener('hidden.bs.modal', handleModalHidden);
+            }, { once: true });
         }
 
         async function loadInitialMessages(chatId, sessionKey, chatType) {

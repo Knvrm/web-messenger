@@ -1,8 +1,10 @@
-import os
+from datetime import timedelta
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from .models import ChatRoom, Message
+from django.utils import timezone
+
+from .models import ChatRoom, Message, SecurityLog
 from django.contrib.auth import get_user_model
 import json
 from django.http import JsonResponse
@@ -165,11 +167,27 @@ def get_session_key(request, chat_id):
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
+
 @login_required
 def send_message(request, room_id):
     """Отправка сообщения"""
     if request.method == 'POST':
         chat = get_object_or_404(ChatRoom, id=room_id, participants=request.user)
+
+        # Проверка ограничений пользователя
+        one_hour_ago = timezone.now() - timedelta(hours=1)
+        malicious_count = SecurityLog.objects.filter(
+            user=request.user,
+            checked_at__gte=one_hour_ago,
+            is_malicious=True
+        ).count()
+        if malicious_count >= 3:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Вы временно ограничены в отправке сообщений',
+                'details': {'reason': 'Превышен лимит подозрительных действий'}
+            }, status=403)
+
         message_text = request.POST.get('message', '').strip()
 
         if message_text:
@@ -316,15 +334,11 @@ def get_last_message(request, chat_id):
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
-MODEL_DIR = "C:/Users/Roman/Desktop/#1/Messenger/chat/models/phishing-email-detection-distilbert_v2.4.1"
-MODEL_PATH = os.path.join(MODEL_DIR, "model.onnx")
-
+# Путь к ONNX-модели (используем неквантованную для надёжности)
+MODEL_PATH = "C:/Users/Roman/Desktop/#1/Messenger/chat/models/phishing-email-detection-distilbert_v2.4.1/model.onnx"
 # Инициализация токенизатора и сессии ONNX
-try:
-    tokenizer = DistilBertTokenizer.from_pretrained(MODEL_DIR)
-    ort_session = ort.InferenceSession(MODEL_PATH)
-except Exception as e:
-    raise Exception(f"Failed to load model or tokenizer: {str(e)}")
+tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+ort_session = ort.InferenceSession(MODEL_PATH)
 
 def tokenize_text(request):
     if request.method == 'POST':

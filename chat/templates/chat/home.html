@@ -1,423 +1,425 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Чаты</title>
-    {% load static %}
-    {% load chat_filters %}
+   <html lang="en">
+   <head>
+       <meta charset="UTF-8">
+       <title>Чаты</title>
+       {% load static %}
+       {% load chat_filters %}
 
-    <link rel="stylesheet" href="{% static 'chat/css/chat.css' %}">
-    <link rel="icon" href="{% static 'favicon/favicon.ico' %}" sizes="any">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
-</head>
-<body data-create-chat-url="{% url 'create-chat' %}"
-      data-get-users-url="{% url 'get-users' %}"
-      data-current-user-id="{{ request.user.id }}">
-    {% block content %}
-    <div class="chat-container">
-        <div id="modelLoading" class="position-fixed top-50 start-50 translate-middle bg-light p-3 rounded shadow" style="display: none; z-index: 1050;">
-            <div class="spinner-border spinner-border-sm me-2" role="status">
-                <span class="visually-hidden">Загрузка...</span>
-            </div>
-            Загрузка модели безопасности...
-        </div>
-        <!-- Боковая панель с чатами -->
-        <div class="chat-sidebar">
-            <div class="sidebar-header">
-                <button class="hamburger-btn rounded-2" id="sidebarToggle" type="button">
-                    <i class="bi bi-list"></i>
-                </button>
-                <div class="search-container flex-grow-1 ms-2">
-                    <input type="text" class="form-control search-input" placeholder="Поиск...">
-                </div>
-                <div class="dropdown-menu" id="sidebarMenu">
-                    <a href="#" data-bs-toggle="modal" data-bs-target="#createChatModal"
-                       class="dropdown-item">
-                        <i class="bi bi-plus-circle me-2"></i> Новый чат
-                    </a>
-                    <a href="{% url 'chat_settings' %}" class="dropdown-item">
-                        <i class="bi bi-gear me-2"></i> Настройки
-                    </a>
-                    <a href="{% url 'logout' %}" class="dropdown-item">
-                        <i class="bi bi-box-arrow-right me-2"></i> Выйти
-                    </a>
-                </div>
-            </div>
-            <div class="chat-list">
-                {% for chat in chats %}
-                <a href="?chat_id={{ chat.id }}"
-                   class="chat-item {% if selected_chat.id == chat.id %}active{% endif %}"
-                   data-encrypted-content="{{ chat.messages.last.content|escape }}"
-                   data-iv="{{ chat.messages.last.iv|escape }}"
-                   data-tag="{{ chat.messages.last.tag|escape }}"
-                   data-chat-type="{{ chat.type }}">
-                    <div class="chat-avatar">
-                        {% if chat.type == 'DM' %}
-                            {% for member in chat.participants.all %}
-                                {% if member != request.user %}
-                                    {{ member.username|first|upper }}
-                                {% endif %}
-                            {% endfor %}
-                        {% else %}
-                            {{ chat.name|first|upper }}
-                        {% endif %}
-                    </div>
-                    <div class="chat-info">
-                        <h4>
-                            {% if chat.type == 'DM' %}
-                                {% for member in chat.participants.all %}
-                                    {% if member != request.user %}{{ member.username }}{% endif %}
-                                {% endfor %}
-                            {% else %}
-                                {{ chat.name }}
-                            {% endif %}
-                        </h4>
-                        <p class="last-message">
-                            {% if chat.messages.last %}
-                                {{ chat.messages.last.content|truncatechars:25 }}
-                            {% else %}
-                                Нет сообщений
-                            {% endif %}
-                        </p>
-                    </div>
-                    <div class="chat-meta">
-                        {% if chat.has_messages and chat.last_message %}
-                            <span class="chat-list-time" title="{{ chat.last_message.timestamp|date:'d E Y в H:i' }}">
-                                {{ chat.last_message.timestamp|telegram_time:chat.has_messages }}
-                            </span>
-                            {% if chat.last_message.sender == request.user %}
-                                <span class="read-status">
-                                    {% if chat.last_message.is_read %}✓✓{% else %}✓{% endif %}
-                                </span>
-                            {% endif %}
-                        {% else %}
-                            <span class="no-messages"></span>
-                        {% endif %}
-                    </div>
-                </a>
-                {% empty %}
-                <div class="no-chats">У вас пока нет чатов</div>
-                {% endfor %}
-            </div>
-        </div>
-        <div class="chat-main">
-            {% if selected_chat %}
-            <div class="chat-header"
-                 data-chat-type="{{ selected_chat.type }}"
-                 data-chat-id="{{ selected_chat.id }}"
-                 data-chat-name="{{ selected_chat.name }}"
-                 data-csrf-token="{{ csrf_token }}">
-                <div class="header-content">
-                    <div class="chat-title-wrapper">
-                        <h2 class="chat-title">
-                            {% if selected_chat.type == 'DM' %}
-                                {% for member in selected_chat.participants.all %}
-                                    {% if member != request.user %}{{ member.username }}{% endif %}
-                                {% endfor %}
-                            {% else %}
-                                {{ selected_chat.name }}
-                                <span class="participants-count">
-                                    {{ selected_chat.participants.count }}
-                                    {% if selected_chat.participants.count == 1 %}участник
-                                    {% elif selected_chat.participants.count >= 2 and selected_chat.participants.count <= 4 %}участника
-                                    {% else %}участников
-                                    {% endif %}
-                                </span>
-                            {% endif %}
-                        </h2>
-                    </div>
-                    <div class="dropdown chat-menu">
-                        <button class="btn dropdown-toggle" type="button" id="chatMenuBtn" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-three-dots-vertical"></i>
-                        </button>
-                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="chatMenuBtn">
-                            <li>
-                                <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#chatInfoModal">
-                                    <i class="bi bi-info-circle me-2"></i>Информация о чате
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item text-danger" href="#" id="leaveChatBtn">
-                                    <i class="bi bi-box-arrow-right me-2"></i>Покинуть чат
-                                </a>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-            <div class="modal fade" id="chatInfoModal" tabindex="-1" aria-labelledby="chatInfoModalLabel" aria-modal="true">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title" id="chatInfoModalLabel">
-                                {% if selected_chat.type == 'DM' %}
-                                    О пользователе
-                                {% else %}
-                                    Информация о чате
-                                {% endif %}
-                            </h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="text-center">
-                                {% if selected_chat.type == 'DM' and recipient %}
-                                    <div class="dm-profile">
-                                        <div class="dm-avatar mx-auto mb-10">
-                                            <div class="chat-avatar-lg bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
-                                                <span class="fs-3 fw-bold">{{ recipient.username|first|upper }}</span>
-                                            </div>
-                                        </div>
-                                        <h3 class="dm-username mb-2" style="font-size: 2rem; letter-spacing: 0.5px;">
-                                            {{ recipient.username }}
-                                        </h3>
-                                        {% if recipient.first_name or recipient.last_name %}
-                                            <p class="dm-fullname text-muted mb-3" style="font-size: 1.3rem;">
-                                                {{ recipient.first_name }} {{ recipient.last_name }}
-                                            </p>
-                                        {% endif %}
-                                        <div class="dm-status mt-3">
-                                            <span class="badge bg-light text-dark py-2 px-3" style="font-size: 1rem;">
-                                                <i class="bi bi-circle-fill text-success me-2" style="font-size: 0.7rem;"></i>
-                                                Был(а) в сети сегодня в {{ recipient.last_login|time:"H:i" }}
-                                            </span>
-                                        </div>
-                                    </div>
-                                {% else %}
-                                    <div class="chat-avatar-lg bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
-                                        <span class="fs-3 fw-bold">{{ selected_chat.name|first|upper }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-center align-items-center mb-1">
-                                        <h2 id="chatNameDisplay" class="mb-0 me-2 fw-bold">{{ selected_chat.name }}</h2>
-                                        <button id="editNameBtn" class="btn btn-sm btn-link p-0 align-self-center" aria-label="Редактировать название">
-                                            <i class="bi bi-pencil-square fs-6 text-muted"></i>
-                                        </button>
-                                    </div>
-                                    <div class="text-muted mb-3">
-                                        {{ selected_chat.participants.count }}
-                                        {% if selected_chat.participants.count == 1 %}участник
-                                        {% elif selected_chat.participants.count >= 2 and selected_chat.participants.count <= 4 %}участника
-                                        {% else %}участников
-                                        {% endif %}
-                                    </div>
-                                    <ul class="list-group">
-                                        {% for member in selected_chat.participants.all %}
-                                            <li class="list-group-item d-flex align-items-center">
-                                                <div class="avatar-sm me-2">
-                                                    <i class="bi bi-person-circle fs-5"></i>
-                                                </div>
-                                                <div class="flex-grow-1">
-                                                    {{ member.username }}
-                                                </div>
-                                                {% if member == request.user %}
-                                                    <span class="badge bg-light text-dark ms-2">Вы</span>
-                                                {% else %}
-                                                    <button class="btn btn-sm btn-outline-danger remove-user-btn"
-                                                            data-user-id="{{ member.id }}"
-                                                            title="Исключить из чата">
-                                                        <i class="bi bi-x-lg"></i>
-                                                    </button>
-                                                {% endif %}
-                                            </li>
-                                        {% endfor %}
-                                    </ul>
-                                {% endif %}
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Закрыть</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div id="error-notification" class="error-notification" style="display: none;"></div>
-            <div class="messages-container">
-                {% for message in messages %}
-                <div class="message-row {% if message.sender == request.user %}sent{% else %}received{% endif %}"
-                     data-message-id="{{ message.id }}"
-                     data-encrypted-content="{{ message.content|escape }}"
-                     data-iv="{{ message.iv|escape }}"
-                     data-tag="{{ message.tag|escape }}"
-                     data-sender-id="{{ message.sender.id }}"
-                     data-is-suspicious="{{ message.is_suspicious|yesno:'true,false' }}">
-                    {% if message.sender != request.user %}
-                    <div class="message-avatar">
-                        <div class="user-avatar">
-                            {{ message.sender.username|first|upper }}
-                        </div>
-                    </div>
-                    {% endif %}
-                    <div class="message-block">
-                        <div class="message-bubble">
-                            {% if selected_chat.type == 'GM' and message.sender != request.user %}
-                            <div class="message-username">
-                                {{ message.sender.username }}
-                            </div>
-                            {% endif %}
-                            <div class="message-text">Encrypted</div>
-                            <div class="message-meta">
-                                <span class="message-time">
-                                    {{ message.timestamp|date:"H:i" }}
-                                </span>
-                                {% if message.sender == request.user %}
-                                <span class="read-status">
-                                    {% if message.is_read %}✓✓{% else %}✓{% endif %}
-                                </span>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% empty %}
-                <div class="no-messages">
-                    <p>Пока нет сообщений</p>
-                </div>
-                {% endfor %}
-            </div>
-            <div class="message-input">
-                <form id="message-form">
-                    {% csrf_token %}
-                    <input type="text" name="message" id="message-input" autocomplete="off" placeholder="Введите сообщение..." required>
-                    <button type="submit">Отправить</button>
-                </form>
-            </div>
-            {% else %}
-            <div class="chat-placeholder">
-                <div class="placeholder-content">
-                    <h3>Выберите чат</h3>
-                    <p>Выберите существующий чат или создайте новый</p>
-                </div>
-            </div>
-            {% endif %}
-        </div>
-    </div>
-    <div class="modal fade" id="addMemberModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Добавить участника</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="input-group mb-3">
-                        <span class="input-group-text"><i class="bi bi-search"></i></span>
-                        <input type="text" class="form-control" id="userSearchInput" placeholder="Найти пользователя...">
-                    </div>
-                    <div class="list-group" id="userListContainer">
-                        <div class="text-center py-3 text-muted">
-                            <div class="spinner-border spinner-border-sm" role="status">
-                                <span class="visually-hidden">Загрузка...</span>
-                            </div>
-                            Загрузка пользователей...
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="modal fade" id="createChatModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Новый чат</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <input type="text" id="userSearch" class="form-control" placeholder="Поиск...">
-                    </div>
-                    <div id="userList" class="list-group" style="max-height: 300px; overflow-y: auto;">
-                        <!-- Список пользователей загрузится через JS -->
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                    <button type="button" id="confirmCreate" class="btn btn-primary">Создать</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="modal fade" id="leaveChatModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Покинуть чат</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    Вы уверены, что хотите покинуть этот чат?
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                    <button type="button" class="btn btn-danger" id="confirmLeaveBtn">Покинуть чат</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="modal fade" id="confirmRemoveModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Исключение участника</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Вы уверены, что хотите исключить <span id="userToRemoveName"></span> из чата?</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                    <button type="button" class="btn btn-danger" id="confirmRemoveBtn">Исключить</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="modal fade" id="decryptModal" tabindex="-1" aria-labelledby="decryptModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="decryptModalLabel">Введите пароль</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="decryptForm">
-                        <div class="mb-3">
-                            <label for="decryptPassword" class="form-label">Пароль</label>
-                            <input type="password" class="form-control" id="decryptPassword" required>
-                        </div>
-                        <button type="submit" class="btn btn-primary">Подтвердить</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="modal fade" id="securityAlertModal" tabindex="-1" aria-labelledby="securityAlertModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="securityAlertModalLabel">Предупреждение безопасности</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
-                </div>
-                <div class="modal-body">
-                    <p id="securityAlertMessage" class="mb-2"></p>
-                    <p><strong>Причина:</strong> <span id="securityAlertDetails"></span></p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
-                    <button type="button" class="btn btn-warning" id="reportLinkButton">Пожаловаться</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endblock %}
-    {{ selected_chat.type|json_script:"selectedChatType" }}
-    {% if selected_chat.type == 'DM' and recipient %}
-    {{ recipient.id|json_script:"recipientId" }}
-    {% endif %}
-    <script type="module" src="{% static 'chat/js/chat.js' %}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="{% static 'chat/js/sidebar.js' %}"></script>
-</body>
-</html>
+       <link rel="stylesheet" href="{% static 'chat/css/chat.css' %}">
+       <link rel="icon" href="{% static 'favicon/favicon.ico' %}" sizes="any">
+       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
+       <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+   </head>
+   <body data-create-chat-url="{% url 'create-chat' %}"
+         data-get-users-url="{% url 'get-users' %}"
+         data-current-user-id="{{ request.user.id }}">
+       {% block content %}
+       <div class="chat-container">
+           <div id="modelLoading" class="position-fixed top-50 start-50 translate-middle bg-light p-3 rounded shadow" style="display: none; z-index: 1050;">
+               <div class="spinner-border spinner-border-sm me-2" role="status">
+                   <span class="visually-hidden">Загрузка...</span>
+               </div>
+               Загрузка модели безопасности...
+           </div>
+           <!-- Боковая панель с чатами -->
+           <div class="chat-sidebar">
+               <div class="sidebar-header">
+                   <button class="hamburger-btn rounded-2" id="sidebarToggle" type="button">
+                       <i class="bi bi-list"></i>
+                   </button>
+                   <div class="search-container flex-grow-1 ms-2">
+                       <input type="text" class="form-control search-input" placeholder="Поиск...">
+                   </div>
+                   <div class="dropdown-menu" id="sidebarMenu">
+                       <a href="#" data-bs-toggle="modal" data-bs-target="#createChatModal"
+                          class="dropdown-item">
+                           <i class="bi bi-plus-circle me-2"></i> Новый чат
+                       </a>
+                       <a href="{% url 'chat_settings' %}" class="dropdown-item">
+                           <i class="bi bi-gear me-2"></i> Настройки
+                       </a>
+                       <a href="{% url 'logout' %}" class="dropdown-item">
+                           <i class="bi bi-box-arrow-right me-2"></i> Выйти
+                       </a>
+                   </div>
+               </div>
+               <div class="chat-list">
+                   {% for chat in chats %}
+                   <a href="?chat_id={{ chat.id }}"
+                      class="chat-item {% if selected_chat.id == chat.id %}active{% endif %}"
+                      data-encrypted-content="{{ chat.messages.last.content|escape }}"
+                      data-iv="{{ chat.messages.last.iv|escape }}"
+                      data-tag="{{ chat.messages.last.tag|escape }}"
+                      data-chat-type="{{ chat.type }}">
+                       <div class="chat-avatar">
+                           {% if chat.type == 'DM' %}
+                               {% for member in chat.participants.all %}
+                                   {% if member != request.user %}
+                                       {{ member.username|first|upper }}
+                                   {% endif %}
+                               {% endfor %}
+                           {% else %}
+                               {{ chat.name|first|upper }}
+                           {% endif %}
+                       </div>
+                       <div class="chat-info">
+                           <h4>
+                               {% if chat.type == 'DM' %}
+                                   {% for member in chat.participants.all %}
+                                       {% if member != request.user %}{{ member.username }}{% endif %}
+                                   {% endfor %}
+                               {% else %}
+                                   {{ chat.name }}
+                               {% endif %}
+                           </h4>
+                           <p class="last-message">
+                               {% if chat.messages.last %}
+                                   {{ chat.messages.last.content|truncatechars:25 }}
+                               {% else %}
+                                   Нет сообщений
+                               {% endif %}
+                           </p>
+                       </div>
+                       <div class="chat-meta">
+                           {% if chat.has_messages and chat.last_message %}
+                               <span class="chat-list-time" title="{{ chat.last_message.timestamp|date:'d E Y в H:i' }}">
+                                   {{ chat.last_message.timestamp|telegram_time:chat.has_messages }}
+                               </span>
+                               {% if chat.last_message.sender == request.user %}
+                                   <span class="read-status">
+                                       {% if chat.last_message.is_read %}✓✓{% else %}✓{% endif %}
+                                   </span>
+                               {% endif %}
+                           {% else %}
+                               <span class="no-messages"></span>
+                           {% endif %}
+                       </div>
+                   </a>
+                   {% empty %}
+                   <div class="no-chats">У вас пока нет чатов</div>
+                   {% endfor %}
+               </div>
+           </div>
+           <div class="chat-main">
+               {% if selected_chat %}
+               <div class="chat-header"
+                    data-chat-type="{{ selected_chat.type }}"
+                    data-chat-id="{{ selected_chat.id }}"
+                    data-chat-name="{{ selected_chat.name }}"
+                    data-csrf-token="{{ csrf_token }}">
+                   <div class="header-content">
+                       <div class="chat-title-wrapper">
+                           <h2 class="chat-title">
+                               {% if selected_chat.type == 'DM' %}
+                                   {% for member in selected_chat.participants.all %}
+                                       {% if member != request.user %}{{ member.username }}{% endif %}
+                                   {% endfor %}
+                               {% else %}
+                                   {{ selected_chat.name }}
+                                   <span class="participants-count">
+                                       {{ selected_chat.participants.count }}
+                                       {% if selected_chat.participants.count == 1 %}участник
+                                       {% elif selected_chat.participants.count >= 2 and selected_chat.participants.count <= 4 %}участника
+                                       {% else %}участников
+                                       {% endif %}
+                                   </span>
+                               {% endif %}
+                           </h2>
+                       </div>
+                       <div class="dropdown chat-menu">
+                           <button class="btn dropdown-toggle" type="button" id="chatMenuBtn" data-bs-toggle="dropdown" aria-expanded="false">
+                               <i class="bi bi-three-dots-vertical"></i>
+                           </button>
+                           <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="chatMenuBtn">
+                               <li>
+                                   <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#chatInfoModal">
+                                       <i class="bi bi-info-circle me-2"></i>Информация о чате
+                                   </a>
+                               </li>
+                               <li>
+                                   <a class="dropdown-item text-danger" href="#" id="leaveChatBtn">
+                                       <i class="bi bi-box-arrow-right me-2"></i>Покинуть чат
+                                   </a>
+                               </li>
+                           </ul>
+                       </div>
+                   </div>
+               </div>
+               <div class="modal fade" id="chatInfoModal" tabindex="-1" aria-labelledby="chatInfoModalLabel" aria-modal="true">
+                   <div class="modal-dialog">
+                       <div class="modal-content">
+                           <div class="modal-header">
+                               <h5 class="modal-title" id="chatInfoModalLabel">
+                                   {% if selected_chat.type == 'DM' %}
+                                       О пользователе
+                                   {% else %}
+                                       Информация о чате
+                                   {% endif %}
+                               </h5>
+                               <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                           </div>
+                           <div class="modal-body">
+                               <div class="text-center">
+                                   {% if selected_chat.type == 'DM' and recipient %}
+                                       <div class="dm-profile">
+                                           <div class="dm-avatar mx-auto mb-10">
+                                               <div class="chat-avatar-lg bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
+                                                   <span class="fs-3 fw-bold">{{ recipient.username|first|upper }}</span>
+                                               </div>
+                                           </div>
+                                           <h3 class="dm-username mb-2" style="font-size: 2rem; letter-spacing: 0.5px;">
+                                               {{ recipient.username }}
+                                           </h3>
+                                           {% if recipient.first_name or recipient.last_name %}
+                                               <p class="dm-fullname text-muted mb-3" style="font-size: 1.3rem;">
+                                                   {{ recipient.first_name }} {{ recipient.last_name }}
+                                               </p>
+                                           {% endif %}
+                                           <div class="dm-status mt-3">
+                                               <span class="badge bg-light text-dark py-2 px-3" style="font-size: 1rem;">
+                                                   <i class="bi bi-circle-fill text-success me-2" style="font-size: 0.7rem;"></i>
+                                                   Был(а) в сети сегодня в {{ recipient.last_login|time:"H:i" }}
+                                               </span>
+                                           </div>
+                                       </div>
+                                   {% else %}
+                                       <div class="chat-avatar-lg bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
+                                           <span class="fs-3 fw-bold">{{ selected_chat.name|first|upper }}</span>
+                                       </div>
+                                       <div class="d-flex justify-content-center align-items-center mb-1">
+                                           <h2 id="chatNameDisplay" class="mb-0 me-2 fw-bold">{{ selected_chat.name }}</h2>
+                                           <button id="editNameBtn" class="btn btn-sm btn-link p-0 align-self-center" aria-label="Редактировать название">
+                                               <i class="bi bi-pencil-square fs-6 text-muted"></i>
+                                           </button>
+                                       </div>
+                                       <div class="text-muted mb-3">
+                                           {{ selected_chat.participants.count }}
+                                           {% if selected_chat.participants.count == 1 %}участник
+                                           {% elif selected_chat.participants.count >= 2 and selected_chat.participants.count <= 4 %}участника
+                                           {% else %}участников
+                                           {% endif %}
+                                       </div>
+                                       <ul class="list-group">
+                                           {% for member in selected_chat.participants.all %}
+                                               <li class="list-group-item d-flex align-items-center">
+                                                   <div class="avatar-sm me-2">
+                                                       <i class="bi bi-person-circle fs-5"></i>
+                                                   </div>
+                                                   <div class="flex-grow-1">
+                                                       {{ member.username }}
+                                                   </div>
+                                                   {% if member == request.user %}
+                                                       <span class="badge bg-light text-dark ms-2">Вы</span>
+                                                   {% else %}
+                                                       <button class="btn btn-sm btn-outline-danger remove-user-btn"
+                                                               data-user-id="{{ member.id }}"
+                                                               title="Исключить из чата">
+                                                           <i class="bi bi-x-lg"></i>
+                                                       </button>
+                                                   {% endif %}
+                                               </li>
+                                           {% endfor %}
+                                       </ul>
+                                   {% endif %}
+                               </div>
+                           </div>
+                           <div class="modal-footer">
+                               <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Закрыть</button>
+                           </div>
+                       </div>
+                   </div>
+               </div>
+               <div id="error-notification" class="error-notification" style="display: none;"></div>
+               <div class="messages-container">
+                   {% for message in messages %}
+                   <div class="message-row {% if message.sender == request.user %}sent{% else %}received{% endif %}"
+                        data-message-id="{{ message.id }}"
+                        data-encrypted-content="{{ message.content|escape }}"
+                        data-iv="{{ message.iv|escape }}"
+                        data-tag="{{ message.tag|escape }}"
+                        data-sender-id="{{ message.sender.id }}"
+                        data-is-suspicious="{{ message.is_suspicious|yesno:'true,false' }}">
+                       {% if message.sender != request.user %}
+                       <div class="message-avatar">
+                           <div class="user-avatar">
+                               {{ message.sender.username|first|upper }}
+                           </div>
+                       </div>
+                       {% endif %}
+                       <div class="message-block">
+                           <div class="message-bubble">
+                               {% if selected_chat.type == 'GM' and message.sender != request.user %}
+                               <div class="message-username">
+                                   {{ message.sender.username }}
+                               </div>
+                               {% endif %}
+                               <div class="message-text">Encrypted</div>
+                               <div class="message-meta">
+                                   <span class="message-time">
+                                       {{ message.timestamp|date:"H:i" }}
+                                   </span>
+                                   {% if message.sender == request.user %}
+                                   <span class="read-status">
+                                       {% if message.is_read %}✓✓{% else %}✓{% endif %}
+                                   </span>
+                                   {% endif %}
+                               </div>
+                           </div>
+                       </div>
+                   </div>
+                   {% empty %}
+                   <div class="no-messages">
+                       <p>Пока нет сообщений</p>
+                   </div>
+                   {% endfor %}
+               </div>
+               <div class="message-input">
+                   <form id="message-form">
+                       {% csrf_token %}
+                       <input type="text" name="message" id="message-input" autocomplete="off" placeholder="Введите сообщение..." required>
+                       <button type="submit">Отправить</button>
+                   </form>
+               </div>
+               {% else %}
+               <div class="chat-placeholder">
+                   <div class="placeholder-content">
+                       <h3>Выберите чат</h3>
+                       <p>Выберите существующий чат или создайте новый</p>
+                   </div>
+               </div>
+               {% endif %}
+           </div>
+       </div>
+       <div class="modal fade" id="addMemberModal" tabindex="-1" aria-hidden="true">
+           <div class="modal-dialog modal-dialog-centered">
+               <div class="modal-content">
+                   <div class="modal-header">
+                       <h5 class="modal-title">Добавить участника</h5>
+                       <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                   </div>
+                   <div class="modal-body">
+                       <div class="input-group mb-3">
+                           <span class="input-group-text"><i class="bi bi-search"></i></span>
+                           <input type="text" class="form-control" id="userSearchInput" placeholder="Найти пользователя...">
+                       </div>
+                       <div class="list-group" id="userListContainer">
+                           <div class="text-center py-3 text-muted">
+                               <div class="spinner-border spinner-border-sm" role="status">
+                                   <span class="visually-hidden">Загрузка...</span>
+                               </div>
+                               Загрузка пользователей...
+                           </div>
+                       </div>
+                   </div>
+                   <div class="modal-footer">
+                       <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                   </div>
+               </div>
+           </div>
+       </div>
+       <div class="modal fade" id="createChatModal" tabindex="-1">
+           <div class="modal-dialog">
+               <div class="modal-content">
+                   <div class="modal-header">
+                       <h5 class="modal-title">Новый чат</h5>
+                       <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                   </div>
+                   <div class="modal-body">
+                       <div class="mb-3">
+                           <input type="text" id="userSearch" class="form-control" placeholder="Поиск...">
+                       </div>
+                       <div id="userList" class="list-group" style="max-height: 300px; overflow-y: auto;">
+                           <!-- Список пользователей загрузится через JS -->
+                       </div>
+                   </div>
+                   <div class="modal-footer">
+                       <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                       <button type="button" id="confirmCreate" class="btn btn-primary">Создать</button>
+                   </div>
+               </div>
+           </div>
+       </div>
+       <div class="modal fade" id="leaveChatModal" tabindex="-1" aria-hidden="true">
+           <div class="modal-dialog">
+               <div class="modal-content">
+                   <div class="modal-header">
+                       <h5 class="modal-title">Покинуть чат</h5>
+                       <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                   </div>
+                   <div class="modal-body">
+                       Вы уверены, что хотите покинуть этот чат?
+                   </div>
+                   <div class="modal-footer">
+                       <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                       <button type="button" class="btn btn-danger" id="confirmLeaveBtn">Покинуть чат</button>
+                   </div>
+               </div>
+           </div>
+       </div>
+       <div class="modal fade" id="confirmRemoveModal" tabindex="-1" aria-hidden="true">
+           <div class="modal-dialog">
+               <div class="modal-content">
+                   <div class="modal-header">
+                       <h5 class="modal-title">Исключение участника</h5>
+                       <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                   </div>
+                   <div class="modal-body">
+                       <p>Вы уверены, что хотите исключить <span id="userToRemoveName"></span> из чата?</p>
+                   </div>
+                   <div class="modal-footer">
+                       <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                       <button type="button" class="btn btn-danger" id="confirmRemoveBtn">Исключить</button>
+                   </div>
+               </div>
+           </div>
+       </div>
+       <div class="modal fade" id="decryptModal" tabindex="-1" aria-labelledby="decryptModalLabel" aria-hidden="true">
+           <div class="modal-dialog">
+               <div class="modal-content">
+                   <div class="modal-header">
+                       <h5 class="modal-title" id="decryptModalLabel">Введите пароль</h5>
+                       <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                   </div>
+                   <div class="modal-body">
+                       <form id="decryptForm">
+                           <div class="mb-3">
+                               <label for="decryptPassword" class="form-label">Пароль</label>
+                               <input type="password" class="form-control" id="decryptPassword" required>
+                           </div>
+                           <button type="submit" class="btn btn-primary">Подтвердить</button>
+                       </form>
+                   </div>
+               </div>
+           </div>
+       </div>
+       <div class="modal fade" id="securityAlertModal" tabindex="-1" aria-labelledby="securityAlertModalLabel" aria-hidden="true">
+           <div class="modal-dialog">
+               <div class="modal-content">
+                   <div class="modal-header">
+                       <h5 class="modal-title" id="securityAlertModalLabel">Предупреждение безопасности</h5>
+                       <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                   </div>
+                   <div class="modal-body">
+                       <p id="securityAlertMessage" class="mb-2"></p>
+                       <p id="securityAlertDetails" class="text-muted"></p>
+                       <p id="phishingBlockMessage" style="display: none;" class="text-danger">
+                           Это сообщение было заблокировано из-за подозрения на фишинг.
+                       </p>
+                   </div>
+                   <div class="modal-footer">
+                       <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                       <button type="button" class="btn btn-warning" id="reportLinkButton">Пожаловаться</button>
+                   </div>
+               </div>
+           </div>
+       </div>
+       {% endblock %}
+       {{ selected_chat.type|json_script:"selectedChatType" }}
+       {% if selected_chat.type == 'DM' and recipient %}
+       {{ recipient.id|json_script:"recipientId" }}
+       {% endif %}
+       <script type="module" src="{% static 'chat/js/chat.js' %}"></script>
+       <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+   </body>
+   </html>

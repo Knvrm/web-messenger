@@ -65,6 +65,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
             # Проверка ограничений пользователя
             if await self.is_user_restricted():
+                print(f"[{time.time()}] User {self.user.username} is restricted, blocking message")
                 await self.send_security_alert(
                     "Вы временно ограничены в отправке сообщений",
                     {"reason": "Превышен лимит подозрительных действий"},
@@ -195,6 +196,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
         details = data.get('details', {})
         url = data.get('url', '') if has_url else None
 
+        # Проверка ограничений пользователя
+        if await self.is_user_restricted():
+            print(f"[{time.time()}] User {self.user.username} is restricted, blocking phishing alert")
+            await self.send_security_alert(
+                "Вы временно ограничены в отправке сообщений",
+                {"reason": "Превышен лимит подозрительных действий"},
+                alert_type="user_restricted"
+            )
+            return
+
         try:
             # Логирование фишингового сообщения
             await self.log_security_event(
@@ -206,8 +217,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 details=details
             )
             await self.apply_user_restrictions()
-
-            # Отправка подтверждения клиенту
             await self.send_security_alert(
                 "Сообщение заблокировано: обнаружен фишинг",
                 {
