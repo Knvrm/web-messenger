@@ -14,3 +14,5 @@ certs/
 *.tmp
 
 .idea/
+
+chat/models/phishing-email-detection-distilbert_v2.4.1/*

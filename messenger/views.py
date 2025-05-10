@@ -6,9 +6,6 @@ def home(request):
         return redirect("chat-home")
     return redirect("login")
 
-def placeholder(request):
-    return render(request, "placeholder.html")
-
 def logout_view(request):
     logout(request)
     return redirect("login")

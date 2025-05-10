@@ -1,3 +1,5 @@
+import os
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from .models import ChatRoom, Message
@@ -8,6 +10,8 @@ from django.views.decorators.http import require_GET, require_POST
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.db.models import Prefetch
 from transformers import DistilBertTokenizer
+import onnxruntime as ort
+import numpy as np
 
 User = get_user_model()
 
@@ -312,14 +316,15 @@ def get_last_message(request, chat_id):
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
-import onnxruntime as ort
-import numpy as np
+MODEL_DIR = "C:/Users/Roman/Desktop/#1/Messenger/chat/models/phishing-email-detection-distilbert_v2.4.1"
+MODEL_PATH = os.path.join(MODEL_DIR, "model.onnx")
 
-# Путь к ONNX-модели (используем неквантованную для надёжности)
-MODEL_PATH = "C:/Users/Roman/Desktop/#1/Messenger/static/chat/models/phishing-email-detection-distilbert_v2.4.1/model.onnx"
 # Инициализация токенизатора и сессии ONNX
-tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-ort_session = ort.InferenceSession(MODEL_PATH)
+try:
+    tokenizer = DistilBertTokenizer.from_pretrained(MODEL_DIR)
+    ort_session = ort.InferenceSession(MODEL_PATH)
+except Exception as e:
+    raise Exception(f"Failed to load model or tokenizer: {str(e)}")
 
 def tokenize_text(request):
     if request.method == 'POST':
