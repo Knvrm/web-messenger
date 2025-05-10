@@ -16,3 +16,6 @@ certs/
 .idea/
 
 chat/models/phishing-email-detection-distilbert_v2.4.1/*
+
+static/chat/models/phishing-email-detection-distilbert_v2.4.1/*
+chat/models/phishing-email-detection-distilbert_v2.4.1/*
