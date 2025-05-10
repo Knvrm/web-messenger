@@ -10,7 +10,6 @@ import re
 MODEL_NAME = "cybersectony/phishing-email-detection-distilbert_v2.4.1"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-
 class PhishingDetector:
     _instance = None
 

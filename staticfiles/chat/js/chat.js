@@ -1,122 +1,22 @@
 document.addEventListener('DOMContentLoaded', function() {
-    //console.log('Chat app initialized');
-
-    // --- ML-модель и Web Worker ---
-    let phishingDetector = null;
-    let modelWorker = null;
     const analysisCache = new Map();
 
-    async function initPhishingDetector() {
-        console.log('Initializing phishing detector');
-        const modelLoading = document.getElementById('modelLoading');
-        if (modelLoading) modelLoading.style.display = 'block';
-
-        try {
-            // Создаём Web Worker
-            modelWorker = new Worker(URL.createObjectURL(new Blob([`
-                console.log('Worker starting, attempting to load transformers.min.js as module');
-                let transformers = null;
-
-                async function loadTransformers() {
-                    try {
-                        transformers = await import('https://mymessenger.local:8443/static/chat/js/transformers.min.js');
-                        console.log('transformers.min.js loaded successfully as module');
-                    } catch (e) {
-                        console.error('Failed to load transformers.min.js:', e);
-                        postMessage({ type: 'error', error: 'Failed to load transformers.min.js: ' + e.message });
-                        throw e;
-                    }
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
                 }
-
-                let model = null;
-                let tokenizer = null;
-
-                async function initModel() {
-                    try {
-                        await loadTransformers();
-                        console.log('Loading Transformers.js v3.5.1 in Worker');
-                        if (!transformers) {
-                            throw new Error('Transformers.js not loaded');
-                        }
-                        console.log('Loading tokenizer');
-                        tokenizer = await transformers.AutoTokenizer.from_pretrained(
-                            'cybersectony/phishing-email-detection-distilbert_v2.4.1'
-                        );
-                        console.log('Loading model');
-                        model = await transformers.AutoModelForSequenceClassification.from_pretrained(
-                            'cybersectony/phishing-email-detection-distilbert_v2.4.1'
-                        );
-                        postMessage({ type: 'modelLoaded' });
-                    } catch (e) {
-                        console.error('Model initialization error:', e);
-                        postMessage({ type: 'error', error: 'Failed to load model: ' + e.message });
-                    }
-                }
-
-                async function analyzeText(inputs) {
-                    try {
-                        console.log('Running model inference');
-                        const outputs = await model(inputs);
-                        const probs = transformers.softmax(outputs.logits, -1)[0];
-                        const predClass = probs.indexOf(Math.max(...probs));
-                        const maxProb = probs[predClass];
-                        postMessage({ type: 'result', predClass, maxProb });
-                    } catch (e) {
-                        console.error('Inference error:', e);
-                        postMessage({ type: 'error', error: 'Inference error: ' + e.message });
-                    }
-                }
-
-                self.onmessage = async function(e) {
-                    const { type, text } = e.data;
-                    if (type === 'init') {
-                        console.log('Initializing model in Worker');
-                        await initModel();
-                    } else if (type === 'analyze') {
-                        console.log('Tokenizing text:', text.slice(0, 50));
-                        const inputs = await tokenizer(text, {
-                            truncation: true,
-                            max_length: 256,
-                            padding: true,
-                            return_tensors: 'pt'
-                        });
-                        await analyzeText(inputs);
-                    }
-                };
-            `], { type: 'text/javascript' })), { type: 'module' });
-
-            // Обработка сообщений от Web Worker
-            return new Promise((resolve, reject) => {
-                modelWorker.onmessage = function(e) {
-                    const { type, predClass, maxProb, error } = e.data;
-                    if (type === 'modelLoaded') {
-                        console.log('Phishing model loaded successfully');
-                        if (modelLoading) modelLoading.style.display = 'none';
-                        resolve();
-                    } else if (type === 'result') {
-                        console.log('Received analysis result:', { predClass, maxProb });
-                        phishingDetector.resolveResult(predClass, maxProb);
-                    } else if (type === 'error') {
-                        console.error('Worker error:', error);
-                        if (modelLoading) modelLoading.style.display = 'none';
-                        reject(new Error(error));
-                    }
-                };
-                modelWorker.onerror = function(e) {
-                    console.error('Worker error:', e);
-                    if (modelLoading) modelLoading.style.display = 'none';
-                    reject(new Error('Worker error: ' + e.message));
-                };
-                modelWorker.postMessage({ type: 'init' });
-            });
-        } catch (e) {
-            console.error('Failed to initialize phishing detector:', e);
-            if (modelLoading) modelLoading.style.display = 'none';
-            return false; // Продолжаем без модели
+            }
         }
+        return cookieValue;
     }
 
-    const phishingDetectorImpl = {
+    const phishingDetector = {
         phishingKeywords: [
             'заблокирован', 'срочно', 'verify', 'account', 'password',
             'карта', 'click here', 'требует', 'подтвердите', 'urgent',
@@ -146,60 +46,92 @@ document.addEventListener('DOMContentLoaded', function() {
                 const hasUrl = /(https?:\/\/\S+|www\.\S+)/i.test(originalText);
                 const hasPhishingKw = this.phishingKeywords.some(kw => cleanText.includes(kw));
                 const hasSafeKw = this.safeKeywords.some(kw => cleanText.includes(kw));
+                const isShortText = cleanText.length < 10; // Проверка на короткий текст
 
-                return new Promise((resolve) => {
-                    this.resolveResult = (predClass, maxProb) => {
-                        const classMapping = {
-                            0: 'phishing',
-                            1: 'phishing_url',
-                            2: 'legitimate',
-                            3: 'legitimate_url'
-                        };
-                        const label = classMapping[predClass];
-                        let isPhishing = label.includes('phishing');
-                        let confidence = maxProb;
-                        let reason = label;
-
-                        if (isPhishing) {
-                            if (hasSafeKw && !hasUrl) {
-                                isPhishing = false;
-                                confidence = Math.max(0.1, confidence - 0.3);
-                                reason = 'safe_keyword_override';
-                            } else if (hasUrl && hasPhishingKw) {
-                                confidence = Math.min(1.0, confidence + 0.15);
-                            }
-                        } else {
-                            if (hasUrl && hasPhishingKw) {
-                                isPhishing = true;
-                                confidence = Math.max(confidence, 0.85);
-                                reason = 'url_with_phishing_keywords';
-                            }
-                        }
-
-                        const result = {
-                            is_phishing: isPhishing,
-                            reason,
-                            confidence: Number(confidence.toFixed(4)),
-                            details: {
-                                text_sample: cleanText.slice(0, 100) + (cleanText.length > 100 ? '...' : ''),
-                                has_url: hasUrl,
-                                has_phishing_keywords: hasPhishingKw,
-                                has_safe_keywords: hasSafeKw,
-                                model_label: label,
-                                model_confidence: maxProb
-                            }
-                        };
-
-                        analysisCache.set(cacheKey, result);
-                        if (analysisCache.size > 1000) {
-                            analysisCache.delete(analysisCache.keys().next().value);
-                        }
-
-                        resolve(result);
-                    };
-
-                    modelWorker.postMessage({ type: 'analyze', text: cleanText });
+                console.log('Analyzing text:', {
+                    cleanText: cleanText.slice(0, 50),
+                    hasUrl,
+                    hasPhishingKw,
+                    hasSafeKw,
+                    isShortText
                 });
+
+                // Серверный инференс
+                console.log('Sending text to server for analysis:', cleanText.slice(0, 50));
+                const response = await fetch('https://mymessenger.local:8443/chat/tokenize/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: new URLSearchParams({ 'text': cleanText })
+                });
+                const result = await response.json();
+                if (result.error) throw new Error(result.error);
+
+                console.log('Server analysis result:', result);
+
+                // Обработка результата
+                const classMapping = {
+                    0: 'phishing',
+                    1: 'phishing_url',
+                    2: 'legitimate',
+                    3: 'legitimate_url'
+                };
+                const label = classMapping[result.predClass];
+                let isPhishing = label.includes('phishing');
+                let confidence = result.maxProb;
+                let reason = label;
+
+                // Корректировка для коротких текстов
+                if (isShortText) {
+                    if (!hasPhishingKw && !hasUrl) {
+                        isPhishing = false;
+                        confidence = Math.max(0.1, confidence - 0.5);
+                        reason = 'short_text_no_phishing_indicators';
+                        console.log('Short text override:', { isPhishing, confidence, reason });
+                    }
+                } else {
+                    // Стандартная логика ключевых слов
+                    if (isPhishing) {
+                        if (hasSafeKw && !hasUrl) {
+                            isPhishing = false;
+                            confidence = Math.max(0.1, confidence - 0.3);
+                            reason = 'safe_keyword_override';
+                        } else if (hasUrl && hasPhishingKw) {
+                            confidence = Math.min(1.0, confidence + 0.15);
+                        }
+                    } else {
+                        if (hasUrl && hasPhishingKw) {
+                            isPhishing = true;
+                            confidence = Math.max(confidence, 0.85);
+                            reason = 'url_with_phishing_keywords';
+                        }
+                    }
+                }
+
+                console.log('Final analysis:', { isPhishing, confidence, reason });
+
+                const analysisResult = {
+                    is_phishing: isPhishing,
+                    reason,
+                    confidence: Number(confidence.toFixed(4)),
+                    details: {
+                        text_sample: cleanText.slice(0, 100) + (cleanText.length > 100 ? '...' : ''),
+                        has_url: hasUrl,
+                        has_phishing_keywords: hasPhishingKw,
+                        has_safe_keywords: hasSafeKw,
+                        model_label: label,
+                        model_confidence: result.maxProb
+                    }
+                };
+
+                analysisCache.set(cacheKey, analysisResult);
+                if (analysisCache.size > 1000) {
+                    analysisCache.delete(analysisCache.keys().next().value);
+                }
+
+                return analysisResult;
             } catch (e) {
                 console.error('Phishing analysis error:', e);
                 return {
@@ -209,17 +141,38 @@ document.addEventListener('DOMContentLoaded', function() {
                     details: { error: true, message: 'Ошибка при анализе текста' }
                 };
             }
+        },
+
+        resolveResult(predClass, maxProb) {
+            console.log('Resolved:', { predClass, maxProb });
         }
     };
 
+    async function initPhishingDetector() {
+        console.log('Initializing phishing detector');
+        const modelLoading = document.getElementById('modelLoading');
+        if (modelLoading) modelLoading.style.display = 'block';
+
+        try {
+            console.log('Phishing detector setup completed');
+            if (modelLoading) modelLoading.style.display = 'none';
+
+            console.log('Testing phishing detector');
+            await phishingDetector.analyzeText("This is a test message to check phishing detection.");
+            return true;
+        } catch (e) {
+            console.error('Failed to initialize phishing detector:', e);
+            if (modelLoading) modelLoading.style.display = 'none';
+            return false;
+        }
+    }
+
     // --- Проверка и расшифровка приватного ключа ---
     async function checkPrivateKey() {
-        console.log('Checking private key availability');
         const sessionPrivateKey = sessionStorage.getItem('sessionPrivateKey');
 
         if (sessionPrivateKey) {
             window.sessionPrivateKey = sessionPrivateKey;
-            console.log('Using private key, length:', sessionPrivateKey.length);
             return true;
         }
 
@@ -336,7 +289,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- Функции шифрования ---
     async function encryptSessionKey(sessionKey, publicKeyPem) {
         try {
             const pemContents = publicKeyPem
@@ -505,7 +457,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- Извлечение URL ---
     function extractUrls(text) {
         const urlRegex = /(?:https?:\/\/|www\.)(?:[^\s<>"]+\.)+[^\s<>"/]+(?:\/[^\s<>"]*)?/g;
         const urls = text.match(urlRegex) || [];
@@ -524,13 +475,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const chatType = chatHeader ? chatHeader.dataset.chatType : null;
     const recipientIdScript = document.getElementById('recipientId');
     const recipientId = recipientIdScript ? JSON.parse(recipientIdScript.textContent) : null;
-    console.log('Recipient ID:', recipientId);
 
     if (chatType === 'DM' && recipientId) {
         chatHeader.dataset.recipientId = recipientId;
     }
 
-    // --- Логика создания чатов (chatApp) ---
     const chatApp = {
         init() {
             this.cacheElements();
@@ -720,7 +669,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- WebSocket и отправка сообщений ---
     async function initWebSocket() {
         const chatHeader = document.querySelector('.chat-header');
         if (!chatHeader) return;
@@ -844,32 +792,29 @@ document.addEventListener('DOMContentLoaded', function() {
             if (message && chatSocket.readyState === WebSocket.OPEN) {
                 if (chatType === 'DM' || chatType === 'GM') {
                     try {
-                        // Проверка на фишинг
-                        if (phishingDetector) {
-                            const result = await phishingDetector.analyzeText(message);
-                            console.log('Phishing analysis result:', result);
-                            if (result.is_phishing && result.confidence > 0.7) {
-                                const details = `Причина: ${result.reason}, Уверенность: ${(result.confidence * 100).toFixed(1)}%` +
-                                    (result.details.has_url ? ', Обнаружен URL' : '') +
-                                    (result.details.has_phishing_keywords ? ', Ключевые слова фишинга' : '');
-                                showSecurityAlert(
-                                    'Обнаружено потенциально опасное сообщение!',
-                                    details,
-                                    'phishing_detected'
-                                );
-                                chatSocket.send(JSON.stringify({
-                                    type: 'phishing_alert',
-                                    message_id: crypto.randomUUID(),
-                                    confidence: result.confidence,
-                                    reason: result.reason,
-                                    has_url: result.details.has_url,
-                                    details: {
-                                        has_phishing_keywords: result.details.has_phishing_keywords,
-                                        has_safe_keywords: result.details.has_safe_keywords
-                                    }
-                                }));
-                                return;
-                            }
+                        const result = await phishingDetector.analyzeText(message);
+                        console.log('Phishing analysis result:', result);
+                        if (result.is_phishing && result.confidence > 0.7) {
+                            const details = `Причина: ${result.reason}, Уверенность: ${(result.confidence * 100).toFixed(1)}%` +
+                                (result.details.has_url ? ', Обнаружен URL' : '') +
+                                (result.details.has_phishing_keywords ? ', Ключевые слова фишинга' : '');
+                            showSecurityAlert(
+                                'Обнаружено потенциально опасное сообщение!',
+                                details,
+                                'phishing_detected'
+                            );
+                            chatSocket.send(JSON.stringify({
+                                type: 'phishing_alert',
+                                message_id: crypto.randomUUID(),
+                                confidence: result.confidence,
+                                reason: result.reason,
+                                has_url: result.details.has_url,
+                                details: {
+                                    has_phishing_keywords: result.details.has_phishing_keywords,
+                                    has_safe_keywords: result.details.has_safe_keywords
+                                }
+                            }));
+                            return;
                         }
 
                         const urls = extractUrls(message);
@@ -1042,7 +987,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- UI: Меню, модалки, переименование ---
     function initUI() {
         const menuBtn = document.getElementById('chatMenuBtn');
         const dropdown = document.getElementById('chatDropdown');
@@ -1287,7 +1231,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         setInterval(updateMessageTimes, 60000);
 
-        // Обработчик кнопки "Пожаловаться" в модальном окне
         const reportLinkButton = document.getElementById('reportLinkButton');
         if (reportLinkButton) {
             reportLinkButton.addEventListener('click', async function() {
@@ -1320,17 +1263,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- Инициализация ---
     async function init() {
         if (await checkPrivateKey()) {
-            try {
-                phishingDetector = phishingDetectorImpl;
-                await initPhishingDetector();
-            } catch (e) {
-                console.error('Phishing detector initialization failed:', e);
-                // Продолжаем без модели
-                phishingDetector = null;
-            }
+            await initPhishingDetector();
             chatApp.init();
             initWebSocket();
             initUI();

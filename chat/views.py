@@ -7,6 +7,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_GET, require_POST
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.db.models import Prefetch
+from transformers import DistilBertTokenizer
 
 User = get_user_model()
 
@@ -310,3 +311,44 @@ def get_last_message(request, chat_id):
         return JsonResponse({'status': 'error', 'message': 'Chat not found'}, status=403)
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+import onnxruntime as ort
+import numpy as np
+
+# Путь к ONNX-модели (используем неквантованную для надёжности)
+MODEL_PATH = "C:/Users/Roman/Desktop/#1/Messenger/static/chat/models/phishing-email-detection-distilbert_v2.4.1/model.onnx"
+# Инициализация токенизатора и сессии ONNX
+tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+ort_session = ort.InferenceSession(MODEL_PATH)
+
+def tokenize_text(request):
+    if request.method == 'POST':
+        text = request.POST.get('text', '')
+        if not text:
+            return JsonResponse({'error': 'No text provided'}, status=400)
+        try:
+            # Токенизация
+            inputs = tokenizer(text, truncation=True, max_length=256, padding=True, return_tensors='np')
+            input_ids = inputs['input_ids']
+            attention_mask = inputs['attention_mask']
+
+            # Инференс
+            ort_inputs = {
+                'input_ids': input_ids.astype(np.int64),
+                'attention_mask': attention_mask.astype(np.int64)
+            }
+            ort_outputs = ort_session.run(None, ort_inputs)
+            logits = ort_outputs[0]
+
+            # Вычисление вероятностей
+            probs = np.exp(logits) / np.sum(np.exp(logits), axis=-1, keepdims=True)
+            pred_class = np.argmax(probs, axis=-1)[0]
+            max_prob = float(probs[0, pred_class])
+
+            return JsonResponse({
+                'predClass': int(pred_class),
+                'maxProb': max_prob
+            })
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)

@@ -13,4 +13,5 @@ urlpatterns = [
     path('get-public-key/<int:user_id>/', views.get_public_key, name='get_public_key'),
     path('get-session-key/<int:chat_id>/', views.get_session_key, name='get_session_key'),
     path('get-last-message/<int:chat_id>/', views.get_last_message, name='get-last-message'),
+    path('tokenize/', views.tokenize_text, name='tokenize_text'),
 ]
