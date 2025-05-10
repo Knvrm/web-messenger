@@ -381,7 +381,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const encryptedWithTag = new Uint8Array(ciphertext.length + tag.length);
             encryptedWithTag.set(ciphertext);
             encryptedWithTag.set(tag, ciphertext.length);
-            console.log('Decrypting with:', { ciphertext: Array.from(ciphertext), iv: Array.from(iv), tag: Array.from(tag) });
+            //console.log('Decrypting with:', { ciphertext: Array.from(ciphertext), iv: Array.from(iv), tag: Array.from(tag) });
             const decrypted = await crypto.subtle.decrypt(
                 {
                     name: 'AES-GCM',
@@ -392,7 +392,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 encryptedWithTag
             );
             const result = new TextDecoder().decode(decrypted);
-            console.log('Decrypted result:', result);
+            //console.log('Decrypted result:', result);
             return result;
         } catch (e) {
             console.error('Message decryption error:', e);
@@ -659,7 +659,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         { content: encryptedContent, iv: iv, tag: tag },
                         sessionKey
                     );
-                    console.log('Decrypted last message for chat', chatId, ':', messageText);
+                    //console.log('Decrypted last message for chat', chatId, ':', messageText);
                     lastMessageElement.textContent = messageText.length > 25 ? messageText.substring(0, 22) + '...' : messageText;
                 } catch (e) {
                     console.error('Failed to decrypt last message for chat', chatId, ':', e);
@@ -701,7 +701,7 @@ document.addEventListener('DOMContentLoaded', function() {
         chatSocket.onmessage = async function(e) {
             try {
                 const data = JSON.parse(e.data);
-                console.log('WebSocket message received:', data);
+                //console.log('WebSocket message received:', data);
                 if (data.type === 'new_message') {
                     let messageText = '[Зашифрованное сообщение]';
                     const isCurrentUser = data.sender_id === parseInt(document.body.dataset.currentUserId);
@@ -716,7 +716,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 { content: data.message, iv: data.iv, tag: data.tag },
                                 sessionKey
                             );
-                            console.log('Decrypted message:', messageText);
+                            //console.log('Decrypted message:', messageText);
                         } catch (e) {
                             console.error('Failed to decrypt message:', e);
                             messageText = '[Ошибка расшифровки]';
@@ -740,7 +740,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     { content: msg.content, iv: msg.iv, tag: msg.tag },
                                     sessionKey
                                 );
-                                console.log('Decrypted history message:', messageText);
+                                //console.log('Decrypted history message:', messageText);
                             } catch (e) {
                                 console.error('Failed to decrypt history message:', e);
                                 messageText = '[Ошибка расшифровки]';
@@ -803,12 +803,14 @@ document.addEventListener('DOMContentLoaded', function() {
                                 details,
                                 'phishing_detected'
                             );
+                            const urls = extractUrls(message);
                             chatSocket.send(JSON.stringify({
                                 type: 'phishing_alert',
                                 message_id: crypto.randomUUID(),
                                 confidence: result.confidence,
                                 reason: result.reason,
                                 has_url: result.details.has_url,
+                                url: urls.length > 0 ? urls[0] : '',
                                 details: {
                                     has_phishing_keywords: result.details.has_phishing_keywords,
                                     has_safe_keywords: result.details.has_safe_keywords
@@ -820,7 +822,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         const urls = extractUrls(message);
                         console.log('Sending message with URLs:', { message, urls });
                         const encryptedData = await encryptMessage(message, sessionKey);
-                        console.log('Encrypted data:', encryptedData);
+                        //console.log('Encrypted data:', encryptedData);
                         chatSocket.send(JSON.stringify({
                             type: 'message',
                             content: encryptedData.content,
@@ -904,7 +906,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             { content: encryptedContent, iv: iv, tag: tag },
                             sessionKey
                         );
-                        console.log('Decrypted initial message:', messageText);
+                        //console.log('Decrypted initial message:', messageText);
                     } catch (e) {
                         console.error('Failed to decrypt initial message:', e);
                         messageText = '[Ошибка расшифровки]';

@@ -43,20 +43,25 @@ class Message(models.Model):
     def __str__(self):
         return f"{self.sender} ({self.timestamp:%Y-%m-%d %H:%M}): {self.content[:30]}..."
 
-class SuspiciousLinkLog(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    url = models.TextField()
-    reason = models.TextField()
+class SecurityLog(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='security_logs')
+    room = models.ForeignKey(ChatRoom, on_delete=models.CASCADE, related_name='security_logs')
+    url = models.URLField(max_length=500, blank=True, null=True)  # Сделали необязательным
+    reason = models.CharField(max_length=255, blank=True)
+    confidence = models.FloatField(null=True, blank=True)
+    message_id = models.CharField(max_length=36, null=True, blank=True)  # Для UUID
+    details = models.JSONField(null=True, blank=True)  # Для дополнительных данных
+    checked_at = models.DateTimeField(auto_now_add=True)
     is_malicious = models.BooleanField(default=False)
-    room = models.ForeignKey(ChatRoom, on_delete=models.CASCADE, null=True)
-    timestamp = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-timestamp']
+        ordering = ['-checked_at']
         indexes = [
-            models.Index(fields=['timestamp']),
+            models.Index(fields=['checked_at']),
             models.Index(fields=['user']),
         ]
 
     def __str__(self):
-        return f"{self.user} sent {self.url} ({'malicious' if self.is_malicious else 'suspicious'})"
+        if self.url:
+            return f"{self.user} sent {self.url} ({'malicious' if self.is_malicious else 'suspicious'})"
+        return f"{self.user} sent suspicious message ({self.reason})"

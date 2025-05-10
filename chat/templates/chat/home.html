@@ -416,7 +416,6 @@
     {% if selected_chat.type == 'DM' and recipient %}
     {{ recipient.id|json_script:"recipientId" }}
     {% endif %}
-    <script src="https://cdn.jsdelivr.net/npm/@huggingface/tokenizers@0.15.0/dist/tokenizers.min.js"></script>
     <script type="module" src="{% static 'chat/js/chat.js' %}"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{% static 'chat/js/sidebar.js' %}"></script>

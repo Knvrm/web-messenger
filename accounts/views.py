@@ -199,7 +199,7 @@ def resend_confirmation_code(request):
 
 def login_view(request):
     if request.method == "POST":
-        print(f"Received POST data: {request.POST}")
+        #print(f"Received POST data: {request.POST}")
         form = LoginForm(data=request.POST)
         if form.is_valid():
             user = form.get_user()

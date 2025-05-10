@@ -64,7 +64,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     def check_password(self, raw_password):
         salt = bytes(self.salt) if isinstance(self.salt, memoryview) else self.salt
         result = verify_password(salt, self.password_hash, raw_password)
-        print(f"Checking password for {self.email}: {result}")
+        #print(f"Checking password for {self.email}: {result}")
         return result
 
     def generate_rsa_keys(self, password: str):

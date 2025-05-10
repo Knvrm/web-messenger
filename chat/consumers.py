@@ -7,7 +7,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
 from .link import validate_url
-from .models import ChatRoom, Message, SuspiciousLinkLog
+from .models import ChatRoom, Message, SecurityLog
 
 User = get_user_model()
 
@@ -94,7 +94,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
                             return
                         if check_result["status"] == "malicious":
                             print(f"[{time.time()}] Malicious URL detected: {url}")
-                            await self.log_suspicious_link(url, check_result["reason"], is_malicious=True)
+                            await self.log_security_event(
+                                url=url,
+                                reason=check_result["reason"],
+                                is_malicious=True,
+                                confidence=0.9
+                            )
                             await self.apply_user_restrictions()
                             await self.send_security_alert(
                                 f"Обнаружена вредоносная ссылка: {url}",
@@ -105,7 +110,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
                         elif check_result["status"] == "suspicious":
                             print(f"[{time.time()}] Suspicious URL detected: {url}")
                             is_suspicious = True
-                            await self.log_suspicious_link(url, check_result["reason"], is_malicious=False)
+                            await self.log_security_event(
+                                url=url,
+                                reason=check_result["reason"],
+                                is_malicious=False,
+                                confidence=0.7
+                            )
                             await self.send_security_alert(
                                 f"Подозрительная ссылка: {url}",
                                 {"reason": check_result["reason"]},
@@ -183,13 +193,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
         reason = data.get('reason', 'phishing_detected')
         has_url = data.get('has_url', False)
         details = data.get('details', {})
+        url = data.get('url', '') if has_url else None
 
         try:
             # Логирование фишингового сообщения
-            await self.log_suspicious_link(
-                url="",  # Нет URL, так как это текстовый фишинг
+            await self.log_security_event(
+                url=url,
                 reason=reason,
-                is_malicious=True,
+                is_malicious=confidence > 0.7,
                 message_id=message_id,
                 confidence=confidence,
                 details=details
@@ -261,26 +272,26 @@ class ChatConsumer(AsyncWebsocketConsumer):
         )
 
     @database_sync_to_async
-    def log_suspicious_link(self, url, reason, is_malicious, message_id=None, confidence=None, details=None):
-        print(f"[{time.time()}] Logging suspicious link: url={url}, reason={reason}, is_malicious={is_malicious}")
+    def log_security_event(self, url, reason, is_malicious, message_id=None, confidence=None, details=None):
+        print(f"[{time.time()}] Logging security event: url={url}, reason={reason}, is_malicious={is_malicious}")
         room = ChatRoom.objects.get(id=self.room_id)
-        SuspiciousLinkLog.objects.create(
+        SecurityLog.objects.create(
             user=self.user,
+            room=room,
             url=url,
             reason=reason,
             is_malicious=is_malicious,
             message_id=message_id,
             confidence=confidence or 0.0,
-            details=details or {},
-            room=room
+            details=details or {}
         )
 
     @database_sync_to_async
     def is_user_restricted(self):
         one_hour_ago = timezone.now() - timedelta(hours=1)
-        recent_logs = SuspiciousLinkLog.objects.filter(
+        recent_logs = SecurityLog.objects.filter(
             user=self.user,
-            timestamp__gte=one_hour_ago,
+            checked_at__gte=one_hour_ago,
             is_malicious=True
         ).count()
         print(f"[{time.time()}] Checking user restrictions: recent_logs={recent_logs}")
@@ -289,14 +300,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def apply_user_restrictions(self):
         one_hour_ago = timezone.now() - timedelta(hours=1)
-        recent_logs = SuspiciousLinkLog.objects.filter(
+        recent_logs = SecurityLog.objects.filter(
             user=self.user,
-            timestamp__gte=one_hour_ago,
+            checked_at__gte=one_hour_ago,
             is_malicious=True
         )
-        suspicious_links_count = recent_logs.count()
-        print(f"[{time.time()}] Applying restrictions: suspicious_links_count={suspicious_links_count}")
+        suspicious_logs_count = recent_logs.count()
+        print(f"[{time.time()}] Applying restrictions: suspicious_logs_count={suspicious_logs_count}")
 
-        if suspicious_links_count >= 3:
+        if suspicious_logs_count >= 3:
             recent_logs.update(is_malicious=True)
-            print(f"[{time.time()}] User {self.user.username} restricted due to {suspicious_links_count} suspicious links")
+            print(f"[{time.time()}] User {self.user.username} restricted due to {suspicious_logs_count} suspicious logs")
