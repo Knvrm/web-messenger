@@ -63,6 +63,18 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 await self.send_error("Сообщение не может быть пустым")
                 return
 
+            # Проверка черного списка
+            if self.is_dm:
+                recipient = await self.get_dm_recipient()
+                # Проверка: заблокирован ли отправитель получателем
+                if await self.is_blocked_by(recipient):
+                    await self.send_error("Вы заблокированы этим пользователем")
+                    return
+                # Проверка: заблокировал ли отправитель получателя
+                if await self.has_blocked(recipient):
+                    await self.send_error("Вы не можете отправить сообщение, так как заблокировали этого пользователя")
+                    return
+
             # Проверка ограничений пользователя
             if await self.is_user_restricted():
                 print(f"[{time.time()}] User {self.user.username} is restricted, blocking message")
@@ -246,6 +258,19 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return room.type == 'DM'
         except ChatRoom.DoesNotExist:
             return False
+
+    @database_sync_to_async
+    def get_dm_recipient(self):
+        room = ChatRoom.objects.get(id=self.room_id)
+        return room.participants.exclude(id=self.user.id).first()
+
+    @database_sync_to_async
+    def is_blocked_by(self, recipient):
+        return recipient.blacklist.filter(id=self.user.id).exists()
+
+    @database_sync_to_async
+    def has_blocked(self, recipient):
+        return self.user.blacklist.filter(id=recipient.id).exists()
 
     @database_sync_to_async
     def send_history(self):

@@ -46,9 +46,12 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     public_key = models.TextField(blank=True, null=True)
     private_key = models.TextField(blank=True, null=True)
     key_salt = models.BinaryField(max_length=16, blank=True, null=True)
-    suspicious_links_count = models.IntegerField(default=0)  # Счётчик подозрительных ссылок
-    last_suspicious_link_at = models.DateTimeField(null=True, blank=True)  # Время последнего нарушения
-    link_restriction_until = models.DateTimeField(null=True, blank=True)  # Ограничение на отправку ссылок
+    suspicious_links_count = models.IntegerField(default=0)
+    last_suspicious_link_at = models.DateTimeField(null=True, blank=True)
+    link_restriction_until = models.DateTimeField(null=True, blank=True)
+    blacklist = models.ManyToManyField('self', symmetrical=False, related_name='blocked_by', blank=True)
+    hide_last_seen = models.BooleanField(default=False, verbose_name="Скрывать время последнего входа")
+    restrict_group_invites = models.BooleanField(default=False, verbose_name="Запретить добавление в групповые чаты")
 
     objects = CustomUserManager()
 

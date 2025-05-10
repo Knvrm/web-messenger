@@ -6,25 +6,57 @@
     {% load static %}
     <link rel="stylesheet" href="{% static 'chat/css/settings.css' %}">
     <link rel="icon" href="{% static 'favicon/favicon.ico' %}" sizes="any">
+    <!-- Подключаем Bootstrap CSS (если ещё не подключен в проекте) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Подключаем Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
 </head>
 <body>
     {% block content %}
-    <a href="{% url 'chat-home' %}" class="btn btn-outline-secondary mb-4">
-        <i class="bi bi-arrow-left"></i> Вернуться к чатам
-    </a>
-    <div class="settings-container">
-        <h2>Настройки аккаунта</h2>
+    {% csrf_token %}
+    <div class="container my-4">
+        <a href="{% url 'chat-home' %}" class="btn btn-outline-secondary mb-4">
+            <i class="bi bi-arrow-left"></i> Вернуться к чатам
+        </a>
+        <div class="settings-container">
+            <h2 class="mb-4">Настройки аккаунта</h2>
 
-        <div class="settings-section">
-            <h4><i class="bi bi-bell"></i> Уведомления</h4>
-            <!-- Форма настроек уведомлений -->
-        </div>
+            <div class="settings-section">
+                <h4><i class="bi bi-eye-slash"></i> Конфиденциальность</h4>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="hideLastSeen" {% if user.hide_last_seen %}checked{% endif %}>
+                    <label class="form-check-label" for="hideLastSeen">Скрывать время последнего входа</label>
+                </div>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="restrictGroupInvites" {% if user.restrict_group_invites %}checked{% endif %}>
+                    <label class="form-check-label" for="restrictGroupInvites">Запретить добавление в групповые чаты</label>
+                </div>
+                <div id="privacyMessage" class="alert alert-dismissible fade" role="alert" style="display: none;">
+                    <span id="privacyMessageText"></span>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            </div>
 
-        <div class="settings-section">
-            <h4><i class="bi bi-lock"></i> Безопасность</h4>
-            <!-- Форма смены пароля -->
+            <div class="settings-section">
+                <h4><i class="bi bi-shield-lock"></i> Черный список</h4>
+                <div class="blacklist-container">
+                    <div class="input-group mb-3">
+                        <select id="user-select" class="form-select">
+                            <option value="">Выберите пользователя</option>
+                        </select>
+                        <button id="block-btn" class="btn btn-danger">Заблокировать</button>
+                    </div>
+                    <ul id="blacklist" class="list-group">
+                        <!-- Список заблокированных пользователей -->
+                    </ul>
+                </div>
+            </div>
         </div>
     </div>
+    <!-- Подключаем Bootstrap JS и Popper.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
+    <script src="{% static 'chat/js/settings.js' %}"></script>
     {% endblock %}
 </body>
 </html>

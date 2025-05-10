@@ -177,10 +177,10 @@
                                                </p>
                                            {% endif %}
                                            <div class="dm-status mt-3">
-                                               <span class="badge bg-light text-dark py-2 px-3" style="font-size: 1rem;">
-                                                   <i class="bi bi-circle-fill text-success me-2" style="font-size: 0.7rem;"></i>
-                                                   Был(а) в сети сегодня в {{ recipient.last_login|time:"H:i" }}
-                                               </span>
+                                                <span class="badge bg-light text-dark py-2 px-3" style="font-size: 1rem;" id="userStatus">
+                                                    <i class="bi bi-circle-fill text-success me-2" style="font-size: 0.7rem;"></i>
+                                                    Загрузка статуса...
+                                                </span>
                                            </div>
                                        </div>
                                    {% else %}
@@ -326,13 +326,14 @@
                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                    </div>
                    <div class="modal-body">
-                       <div class="mb-3">
-                           <input type="text" id="userSearch" class="form-control" placeholder="Поиск...">
-                       </div>
-                       <div id="userList" class="list-group" style="max-height: 300px; overflow-y: auto;">
-                           <!-- Список пользователей загрузится через JS -->
-                       </div>
-                   </div>
+                        <div class="mb-3">
+                            <input type="text" id="userSearch" class="form-control" placeholder="Поиск...">
+                        </div>
+                        <div id="createChatError" class="text-danger mb-3" style="display: none;"></div>
+                        <div id="userList" class="list-group" style="max-height: 300px; overflow-y: auto;">
+                            <!-- Список пользователей загрузится через JS -->
+                        </div>
+                    </div>
                    <div class="modal-footer">
                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
                        <button type="button" id="confirmCreate" class="btn btn-primary">Создать</button>

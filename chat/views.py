@@ -1,9 +1,7 @@
 from datetime import timedelta
-
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
-
 from .models import ChatRoom, Message, SecurityLog
 from django.contrib.auth import get_user_model
 import json
@@ -92,14 +90,23 @@ def create_chat(request):
         user_ids = data.get('users', [])
         encrypted_session_keys = data.get('encrypted_session_keys', {})
 
-        #print(user_ids)
-        #print(encrypted_session_keys)
-
         if not user_ids:
-            return JsonResponse({'status': 'error', 'message': 'No users selected'}, status=400)
+            return JsonResponse({'status': 'error', 'message': 'Не выбраны пользователи'}, status=400)
 
+        # Получаем пользователей, исключая текущего
         users = User.objects.filter(id__in=user_ids).exclude(id=request.user.id)
 
+        # Проверяем настройку restrict_group_invites для групповых чатов
+        if len(users) > 1:  # Групповой чат (более одного собеседника)
+            restricted_users = users.filter(restrict_group_invites=True)
+            if restricted_users.exists():
+                restricted_usernames = ', '.join(restricted_users.values_list('username', flat=True))
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'Пользователи {restricted_usernames} запретили добавление в групповые чаты'
+                }, status=403)
+
+        # Проверяем существующий DM-чат
         if users.count() == 1:
             existing_chat = ChatRoom.objects.filter(
                 type='DM',
@@ -112,12 +119,14 @@ def create_chat(request):
                     'chat_id': existing_chat.id
                 })
 
+        # Создаём новый чат
         new_chat = ChatRoom.objects.create(
             type='DM' if users.count() == 1 else 'GM',
             encrypted_session_keys=encrypted_session_keys
         )
         new_chat.participants.add(request.user, *users)
 
+        # Устанавливаем имя для группового чата
         if new_chat.type == 'GM':
             member_names = list(users.values_list('username', flat=True))
             if request.user.username not in member_names:
@@ -371,3 +380,111 @@ def tokenize_text(request):
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
     return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+
+@require_GET
+@login_required
+def get_blacklist(request):
+    try:
+        blacklist = User.objects.filter(blocked_by=request.user).values('id', 'username')
+        return JsonResponse({
+            'status': 'success',
+            'blacklist': list(blacklist)
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+@require_POST
+@login_required
+def add_to_blacklist(request):
+    try:
+        user_id = request.POST.get('user_id')
+        if not user_id:
+            return JsonResponse({'status': 'error', 'message': 'User ID is required'}, status=400)
+        if user_id == str(request.user.id):
+            return JsonResponse({'status': 'error', 'message': 'Cannot block yourself'}, status=400)
+
+        user_to_block = get_object_or_404(User, id=user_id)
+        request.user.blacklist.add(user_to_block)
+        return JsonResponse({'status': 'success', 'message': f'{user_to_block.username} added to blacklist'})
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+@require_POST
+@login_required
+def remove_from_blacklist(request):
+    try:
+        user_id = request.POST.get('user_id')
+        if not user_id:
+            return JsonResponse({'status': 'error', 'message': 'User ID is required'}, status=400)
+
+        user_to_unblock = get_object_or_404(User, id=user_id)
+        request.user.blacklist.remove(user_to_unblock)
+        return JsonResponse({'status': 'success', 'message': f'{user_to_unblock.username} removed from blacklist'})
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+@require_POST
+@login_required
+def update_privacy(request):
+    try:
+        hide_last_seen = request.POST.get('hide_last_seen') == 'true'
+        restrict_group_invites = request.POST.get('restrict_group_invites') == 'true'
+        request.user.hide_last_seen = hide_last_seen
+        request.user.restrict_group_invites = restrict_group_invites
+        request.user.save()
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Настройки приватности обновлены'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+def format_last_seen(last_login):
+    """Форматирует время последнего входа в человеко-читаемый вид."""
+    now = timezone.now()
+    delta = now - last_login
+    if delta < timedelta(minutes=1):
+        return 'только что'
+    elif delta < timedelta(hours=1):
+        minutes = delta.seconds // 60
+        return f'{minutes} мин. назад'
+    elif delta < timedelta(days=1):
+        hours = delta.seconds // 3600
+        return f'{hours} ч. назад'
+    elif delta < timedelta(days=7):
+        days = delta.days
+        return f'{days} д. назад'
+    else:
+        return last_login.strftime('%d.%m.%Y %H:%M')
+
+@require_GET
+@login_required
+def get_user_status(request, user_id):
+    try:
+        user = get_object_or_404(User, id=user_id)
+        if user.hide_last_seen:
+            last_seen = 'recently'
+        else:
+            last_login = user.last_login
+            if last_login:
+                last_seen = format_last_seen(last_login)
+            else:
+                last_seen = 'никогда'
+        return JsonResponse({
+            'status': 'success',
+            'last_seen': last_seen
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)

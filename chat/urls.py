@@ -14,4 +14,9 @@ urlpatterns = [
     path('get-session-key/<int:chat_id>/', views.get_session_key, name='get_session_key'),
     path('get-last-message/<int:chat_id>/', views.get_last_message, name='get-last-message'),
     path('tokenize/', views.tokenize_text, name='tokenize_text'),
+    path('settings/blacklist/', views.get_blacklist, name='get-blacklist'),
+    path('settings/blacklist/add/', views.add_to_blacklist, name='add-to-blacklist'),
+    path('settings/blacklist/remove/', views.remove_from_blacklist, name='remove-from-blacklist'),
+    path('get-user-status/<int:user_id>/', views.get_user_status, name='get-user-status'),
+    path('settings/update-privacy/', views.update_privacy, name='update-privacy'),
 ]

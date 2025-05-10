@@ -1,10 +1,10 @@
 .settings-container {
     max-width: 800px;
-    margin: 30px auto;
+    margin: 0 auto;
     padding: 20px;
-    background: white;
+    background: #fff;
     border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
 .settings-section {
@@ -19,4 +19,50 @@
     display: flex;
     align-items: center;
     gap: 10px;
+    font-size: 1.25rem;
+}
+
+.blacklist-container {
+    margin-top: 10px;
+}
+
+.list-group-item {
+    padding: 10px 15px;
+    font-size: 0.95rem;
+}
+
+.btn-danger, .btn-outline-danger {
+    margin-left: 10px;
+    font-size: 0.9rem;
+}
+
+#privacyMessage {
+    margin-top: 10px;
+    padding: 10px 15px;
+    font-size: 0.95rem;
+    transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+}
+
+#privacyMessage.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+#privacyMessage:not(.show) {
+    opacity: 0;
+    transform: translateY(-10px);
+}
+
+#privacyMessage.alert-success {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+#privacyMessage.alert-danger {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.form-check-label {
+    font-size: 0.95rem;
 }

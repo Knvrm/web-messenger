@@ -154,7 +154,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (modelLoading) modelLoading.style.display = 'block';
 
         try {
-            console.log('Phishing detector setup completed');
+            //console.log('Phishing detector setup completed');
             if (modelLoading) modelLoading.style.display = 'none';
             return true;
         } catch (e) {
@@ -572,7 +572,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 this.showError('Выберите хотя бы одного другого участника');
                 return;
             }
-            console.log('select user ' + selectedUsers);
+            console.log('Selected users:', selectedUsers);
+
+            // Очистка предыдущей ошибки
+            const errorElement = document.getElementById('createChatError');
+            if (errorElement) {
+                errorElement.textContent = '';
+                errorElement.style.display = 'none';
+            }
+
             try {
                 const sessionKey = await crypto.subtle.generateKey(
                     { name: 'AES-GCM', length: 256 },
@@ -581,7 +589,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 );
 
                 const currentUserId = document.body.dataset.currentUserId;
-                console.log('current user ' + currentUserId);
+                console.log('Current user:', currentUserId);
                 if (!currentUserId) {
                     throw new Error('Current user ID is missing in chat header');
                 }
@@ -607,11 +615,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     })
                 });
 
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-                }
-
                 const data = await response.json();
 
                 if (data.status === 'success' || data.status === 'exists') {
@@ -619,6 +622,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     sessionStorage.setItem(`chat_${data.chat_id}_sessionKey`, btoa(String.fromCharCode(...new Uint8Array(exportedKey))));
                     window.location.href = `${this.baseUrl}/chat/?chat_id=${data.chat_id}`;
                 } else {
+                    console.error('Error creating chat:', data.message);
                     this.showError(data.message || 'Неизвестная ошибка');
                 }
             } catch (error) {
@@ -1062,9 +1066,104 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (document.getElementById('chatInfoModal')) {
-            const modal = new bootstrap.Modal(document.getElementById('chatInfoModal'));
-            document.getElementById('chatInfoModal').addEventListener('shown.bs.modal', function() {
-                dropdown.classList.remove('show');
+            console.log('Found chatInfoModal, initializing modal listener');
+            const modalElement = document.getElementById('chatInfoModal');
+            const modal = new bootstrap.Modal(modalElement);
+            modalElement.addEventListener('shown.bs.modal', function() {
+                // Проверяем наличие выпадающего меню в .chat-menu
+                const dropdown = document.querySelector('.chat-menu .dropdown-menu');
+                if (dropdown) {
+                    dropdown.classList.remove('show');
+                    console.log('Dropdown menu hidden');
+                } else {
+                    console.warn('Dropdown menu (.chat-menu .dropdown-menu) not found');
+                }
+                // Загрузка статуса пользователя для DM чата
+                const chatHeader = document.querySelector('.chat-header');
+                if (!chatHeader) {
+                    console.error('Chat header not found');
+                    const statusElement = document.getElementById('userStatus');
+                    if (statusElement) {
+                        statusElement.textContent = 'Ошибка: Заголовок чата отсутствует';
+                    }
+                    return;
+                }
+                const chatType = chatHeader.dataset.chatType;
+                console.log('Chat type:', chatType);
+                if (chatType !== 'DM') {
+                    console.log('Not a DM chat, skipping status fetch');
+                    const statusElement = document.getElementById('userStatus');
+                    if (statusElement) {
+                        statusElement.textContent = 'Статус доступен только для личных чатов';
+                    }
+                    return;
+                }
+                let recipientId = chatHeader.dataset.recipientId;
+                // Резервный способ получения recipientId
+                if (!recipientId) {
+                    console.warn('recipientId not found in chatHeader.dataset, trying script tag');
+                    const recipientIdScript = document.getElementById('recipientId');
+                    if (recipientIdScript) {
+                        try {
+                            recipientId = JSON.parse(recipientIdScript.textContent);
+                            console.log('recipientId from script tag:', recipientId);
+                        } catch (e) {
+                            console.error('Failed to parse recipientId from script tag:', e);
+                        }
+                    }
+                }
+                console.log('Recipient ID:', recipientId);
+                if (!recipientId) {
+                    console.error('Recipient ID is missing');
+                    const statusElement = document.getElementById('userStatus');
+                    if (statusElement) {
+                        statusElement.textContent = 'Ошибка: ID пользователя отсутствует';
+                    }
+                    return;
+                }
+                console.log('Fetching user status for recipientId:', recipientId);
+                fetch(`/chat/get-user-status/${recipientId}/`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    credentials: 'include'
+                })
+                    .then(response => {
+                        console.log('User status response:', { status: response.status, ok: response.ok });
+                        if (!response.ok) {
+                            throw new Error(`HTTP error: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log('User status data:', data);
+                        const statusElement = document.getElementById('userStatus');
+                        if (!statusElement) {
+                            console.error('userStatus element not found');
+                            return;
+                        }
+                        if (data.status === 'success') {
+                            statusElement.textContent = data.last_seen === 'recently'
+                                ? 'Был в сети недавно'
+                                : `Был(а) в сети ${data.last_seen}`;
+                        } else {
+                            statusElement.textContent = `Ошибка: ${data.message || 'Неизвестная ошибка'}`;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching user status:', error);
+                        const statusElement = document.getElementById('userStatus');
+                        if (statusElement) {
+                            statusElement.textContent = 'Ошибка загрузки статуса';
+                        }
+                    });
+            });
+            // Дополнительная проверка инициализации модала
+            modalElement.addEventListener('show.bs.modal', function() {
+                console.log('chatInfoModal show event triggered (before shown)');
             });
         }
 
