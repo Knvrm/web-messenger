@@ -372,13 +372,27 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function decryptMessage(encryptedData, sessionKey) {
         try {
-            const ciphertext = new Uint8Array(atob(encryptedData.content).split('').map(c => c.charCodeAt(0)));
-            const iv = new Uint8Array(atob(encryptedData.iv).split('').map(c => c.charCodeAt(0)));
-            const tag = new Uint8Array(atob(encryptedData.tag).split('').map(c => c.charCodeAt(0)));
+            // Декодируем base64 в Uint8Array
+            const decodeBase64 = (str) => {
+                const binaryString = atob(str);
+                const len = binaryString.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                return bytes;
+            };
+
+            const iv = decodeBase64(encryptedData.iv);
+            const tag = decodeBase64(encryptedData.tag);
+            const ciphertext = decodeBase64(encryptedData.content);
+
+            // Собираем зашифрованные данные с тегом
             const encryptedWithTag = new Uint8Array(ciphertext.length + tag.length);
             encryptedWithTag.set(ciphertext);
             encryptedWithTag.set(tag, ciphertext.length);
-            //console.log('Decrypting with:', { ciphertext: Array.from(ciphertext), iv: Array.from(iv), tag: Array.from(tag) });
+
+            // Расшифровка
             const decrypted = await crypto.subtle.decrypt(
                 {
                     name: 'AES-GCM',
@@ -388,12 +402,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 sessionKey,
                 encryptedWithTag
             );
-            const result = new TextDecoder().decode(decrypted);
-            //console.log('Decrypted result:', result);
-            return result;
-        } catch (e) {
-            console.error('Message decryption error:', e);
-            throw e;
+
+            // Преобразуем в строку (для текстовых сообщений)
+            return new TextDecoder().decode(decrypted);
+        } catch (error) {
+            console.error('Message decryption error:', error);
+            throw error;
         }
     }
 
@@ -648,20 +662,35 @@ document.addEventListener('DOMContentLoaded', function() {
         for (const chatItem of chatItems) {
             const chatId = new URL(chatItem.href).searchParams.get('chat_id');
             const encryptedContent = chatItem.dataset.encryptedContent;
+            const fileData = chatItem.dataset.fileData;
             const iv = chatItem.dataset.iv;
             const tag = chatItem.dataset.tag;
             const lastMessageElement = chatItem.querySelector('.last-message');
             const chatType = chatItem.dataset.chatType || 'DM';
 
-            if (encryptedContent && iv && tag && lastMessageElement && lastMessageElement.textContent !== 'Нет сообщений') {
+//            console.log("chatId:", chatId);
+//            console.log("iv:", iv);
+//            console.log("tag:", tag);
+//            console.log("encryptedContent:", encryptedContent);
+//            console.log("fileData:", fileData);
+//            console.log("lastMessageElement:", lastMessageElement);
+//            console.log("textContent:", lastMessageElement.textContent);
+
+            if (iv && tag && lastMessageElement && lastMessageElement.textContent !== 'Нет сообщений') {
                 try {
                     const sessionKey = await getSessionKey(chatId);
-                    const messageText = await decryptMessage(
-                        { content: encryptedContent, iv: iv, tag: tag },
-                        sessionKey
-                    );
-                    //console.log('Decrypted last message for chat', chatId, ':', messageText);
-                    lastMessageElement.textContent = messageText.length > 25 ? messageText.substring(0, 22) + '...' : messageText;
+
+                    if (fileData) {
+                        lastMessageElement.textContent = encryptedContent || '[Файл]';
+                    } else if (encryptedContent) {
+                        const messageText = await decryptMessage(
+                            { content: encryptedContent, iv: iv, tag: tag },
+                            sessionKey
+                        );
+                        lastMessageElement.textContent = messageText.length > 25 ? messageText.substring(0, 22) + '...' : messageText;
+                    } else {
+                        lastMessageElement.textContent = '[Пустое сообщение]';
+                    }
                 } catch (e) {
                     console.error('Failed to decrypt last message for chat', chatId, ':', e);
                     lastMessageElement.textContent = '[Ошибка расшифровки]';
@@ -737,29 +766,38 @@ document.addEventListener('DOMContentLoaded', function() {
         await loadInitialMessages(chatId, sessionKey, chatType);
         await decryptLastMessages();
 
-        const chatSocket = new WebSocket(wsUrl);
+        window.chatSocket = new WebSocket(wsUrl);
         const messageForm = document.getElementById('message-form');
         const messageInput = document.getElementById('message-input');
+        const fileInput = document.getElementById('file-input');
 
-        chatSocket.onopen = function() {
+        if (!fileInput) {
+            console.error('File input element not found');
+            return;
+        }
+
+        window.chatSocket.onopen = function() {
             console.log('WebSocket connected');
         };
 
         let isUserRestricted = false;
 
-        chatSocket.onmessage = async function(e) {
+        window.chatSocket.onmessage = async function(e) {
             try {
                 const data = JSON.parse(e.data);
+                console.log('Received message:', data);
                 if (data.type === 'security_alert') {
                     if (data.alert_type === 'user_restricted') {
-                        isUserRestricted = true; // Установить флаг блокировки
+                        isUserRestricted = true;
                     }
                     showSecurityAlert(data.message, data.details, data.alert_type);
                 }
-                //console.log('WebSocket message received:', data);
                 if (data.type === 'new_message') {
-                    let messageText = '[Зашифрованное сообщение]';
+                    let messageText = data.message || '[Зашифрованное сообщение]';
+                    let decryptedFileData = null;
                     const isCurrentUser = data.sender_id === parseInt(document.body.dataset.currentUserId);
+
+                    // Расшифровываем текстовое сообщение
                     if ((chatType === 'DM' || chatType === 'GM') && data.message && data.iv && data.tag) {
                         try {
                             console.log('Attempting to decrypt message with:', {
@@ -771,19 +809,46 @@ document.addEventListener('DOMContentLoaded', function() {
                                 { content: data.message, iv: data.iv, tag: data.tag },
                                 sessionKey
                             );
-                            //console.log('Decrypted message:', messageText);
                         } catch (e) {
                             console.error('Failed to decrypt message:', e);
+                            console.log('Decryption error stack:', e.stack);
                             messageText = '[Ошибка расшифровки]';
                         }
                     }
-                    addMessageToChat({ ...data, message: messageText }, isCurrentUser, chatType);
+
+                    // Расшифровываем file_data, если оно есть
+                    if (data.file_data && data.iv && data.tag) {
+                        try {
+                            console.log('Attempting to decrypt file_data with:', {
+                                content: data.file_data,
+                                iv: data.iv,
+                                tag: data.tag
+                            });
+                            decryptedFileData = await decryptFileData(
+                                { content: data.file_data, iv: data.iv, tag: data.tag },
+                                sessionKey
+                            );
+                        } catch (e) {
+                            console.error('Failed to decrypt file_data:', e);
+                            console.log('Decryption error stack:', e.stack);
+                            decryptedFileData = null;
+                        }
+                    }
+
+                    console.log('Adding message to chat:', { ...data, message: messageText, decryptedFileData });
+                    addMessageToChat(
+                        { ...data, message: messageText, decryptedFileData },
+                        isCurrentUser,
+                        chatType
+                    );
                 } else if (data.type === 'history') {
                     const messagesContainer = document.querySelector('.messages-container');
                     messagesContainer.innerHTML = '';
                     for (const msg of data.messages) {
                         const isCurrentUser = msg.sender_id === parseInt(document.body.dataset.currentUserId);
-                        let messageText = '[Зашифрованное сообщение]';
+                        let messageText = msg.content || '[Зашифрованное сообщение]';
+                        let decryptedFileData = null;
+
                         if ((chatType === 'DM' || chatType === 'GM') && msg.content && msg.iv && msg.tag) {
                             try {
                                 console.log('Attempting to decrypt history message with:', {
@@ -795,12 +860,31 @@ document.addEventListener('DOMContentLoaded', function() {
                                     { content: msg.content, iv: msg.iv, tag: msg.tag },
                                     sessionKey
                                 );
-                                //console.log('Decrypted history message:', messageText);
                             } catch (e) {
                                 console.error('Failed to decrypt history message:', e);
+                                console.log('Decryption error stack:', e.stack);
                                 messageText = '[Ошибка расшифровки]';
                             }
                         }
+
+                        if (msg.file_data && msg.iv && msg.tag) {
+                            try {
+                                console.log('Attempting to decrypt history file_data with:', {
+                                    content: msg.file_data,
+                                    iv: msg.iv,
+                                    tag: msg.tag
+                                });
+                                decryptedFileData = await decryptFileData(
+                                    { content: msg.file_data, iv: msg.iv, tag: msg.tag },
+                                    sessionKey
+                                );
+                            } catch (e) {
+                                console.error('Failed to decrypt history file_data:', e);
+                                console.log('Decryption error stack:', e.stack);
+                                decryptedFileData = null;
+                            }
+                        }
+
                         addMessageToChat(
                             {
                                 message: messageText,
@@ -811,7 +895,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                 tag: msg.tag,
                                 timestamp: msg.timestamp,
                                 is_read: msg.is_read,
-                                is_suspicious: msg.is_suspicious || false
+                                is_suspicious: msg.is_suspicious || false,
+                                file_name: msg.file_name,
+                                file_size: msg.file_size,
+                                file_data: msg.file_data,
+                                decryptedFileData
                             },
                             isCurrentUser,
                             chatType
@@ -830,12 +918,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         };
 
-        chatSocket.onerror = function(error) {
+        window.chatSocket.onerror = function(error) {
             console.error('WebSocket Error:', error);
             showSecurityAlert('Ошибка WebSocket', 'Не удалось установить соединение.', 'error');
         };
 
-        chatSocket.onclose = function() {
+        window.chatSocket.onclose = function() {
             console.log('WebSocket disconnected');
             showSecurityAlert('Соединение закрыто', 'WebSocket-соединение было разорвано.', 'error');
         };
@@ -903,6 +991,129 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
+        // Обработчик загрузки файла
+        if (fileInput) {
+            const handleFileChange = async (e) => {
+                console.log('File input changed event:', e);
+                console.log('Files:', e.target.files);
+                const file = e.target.files[0];
+                if (!file) {
+                    console.warn('No file selected, ignoring change event');
+                    return;
+                }
+
+                if (window.chatSocket.readyState === WebSocket.OPEN) {
+                    try {
+                        console.log('Processing file:', file.name);
+                        const fileContent = await file.arrayBuffer();
+                        console.log('File content length:', fileContent.byteLength);
+
+                        // Вычисляем SHA256 хэш файла
+                        const hashBuffer = await crypto.subtle.digest('SHA-256', fileContent);
+                        const hashArray = Array.from(new Uint8Array(hashBuffer));
+                        const fileHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                        console.log('Calculated file hash:', fileHash);
+
+                        // Проверяем хэш через VirusTotal
+                        let response = await fetch('/chat/check-file-hash/', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': getCookie('csrftoken'),
+                            },
+                            body: JSON.stringify({ hash: fileHash }),
+                        });
+
+                        let result = await response.json();
+                        if (result.error) {
+                            throw new Error(result.error);
+                        }
+
+                        if (result.is_malicious) {
+                            alert('Файл помечен как вредоносный (VirusTotal). Загрузка отклонена.');
+                            fileInput.value = '';
+                            return;
+                        }
+
+                        // Если хэш не найден, загружаем файл для полной проверки (ClamAV + VirusTotal)
+                        if (result.needs_upload) {
+                            console.log('Hash not found, uploading file for scanning...');
+                            const formData = new FormData();
+                            formData.append('file', file);
+
+                            response = await fetch('/chat/upload-and-check-file/', {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRFToken': getCookie('csrftoken'),
+                                },
+                                body: formData,
+                            });
+
+                            result = await response.json();
+                            if (result.error) {
+                                throw new Error(result.error);
+                            }
+
+                            if (result.is_malicious) {
+                                alert('Файл помечен как вредоносный (VirusTotal/ClamAV). Загрузка отклонена.');
+                                fileInput.value = '';
+                                return;
+                            }
+                        }
+
+                        // Шифруем и отправляем файл
+                        const iv = crypto.getRandomValues(new Uint8Array(12));
+                        const encrypted = await crypto.subtle.encrypt(
+                            { name: 'AES-GCM', iv: iv, tagLength: 128 },
+                            sessionKey,
+                            fileContent
+                        );
+                        console.log('Encryption completed, encrypted length:', encrypted.byteLength);
+                        const ciphertext = encrypted.slice(0, -16);
+                        const tag = encrypted.slice(-16);
+
+                        const arrayToBase64 = (array) => {
+                            const chunkSize = 8192;
+                            const bytes = new Uint8Array(array);
+                            let binary = '';
+                            for (let i = 0; i < bytes.length; i += chunkSize) {
+                                const chunk = bytes.subarray(i, i + chunkSize);
+                                binary += String.fromCharCode.apply(null, chunk);
+                            }
+                            return btoa(binary);
+                        };
+
+                        const encryptedFileData = arrayToBase64(ciphertext);
+                        const ivB64 = arrayToBase64(iv);
+                        const tagB64 = arrayToBase64(tag);
+
+                        window.chatSocket.send(JSON.stringify({
+                            type: 'message',
+                            content: `File: ${file.name}`,
+                            iv: ivB64,
+                            tag: tagB64,
+                            file_name: file.name,
+                            file_size: file.size,
+                            file_data: encryptedFileData
+                        }));
+                        setTimeout(() => {
+                            fileInput.value = '';
+                            console.log('File input value reset');
+                        }, 0);
+                    } catch (error) {
+                        console.error('File encryption or check error:', error);
+                        alert('Ошибка обработки файла: ' + error.message);
+                    }
+                } else {
+                    alert('Ошибка: WebSocket-соединение не активно.');
+                }
+            };
+
+            fileInput.addEventListener('change', handleFileChange, { once: false });
+        } else {
+            console.error('No file input element found with id="file-input"');
+        }
+
         function showSecurityAlert(message, details = {}, alertType = 'generic') {
             const modalEl = document.getElementById('securityAlertModal');
             const messageEl = document.getElementById('securityAlertMessage');
@@ -945,36 +1156,147 @@ document.addEventListener('DOMContentLoaded', function() {
             }, { once: true });
         }
 
+        async function decryptFileData({ content, iv, tag }, key) {
+            try {
+                console.log('Decrypting file data with key:', key);
+                console.log('Input file data:', { content: content.slice(0, 50), iv, tag });
+
+                // Эффективное декодирование Base64
+                const base64ToArray = (str) => {
+                    const binaryString = atob(str);
+                    const bytes = new Uint8Array(binaryString.length);
+                    for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                    }
+                    return bytes;
+                };
+
+                const ivArray = base64ToArray(iv);
+                const tagArray = base64ToArray(tag);
+                const contentArray = base64ToArray(content);
+
+                const encryptedWithTag = new Uint8Array(contentArray.length + tagArray.length);
+                encryptedWithTag.set(contentArray);
+                encryptedWithTag.set(tagArray, contentArray.length);
+
+                const decrypted = await crypto.subtle.decrypt(
+                    {
+                        name: 'AES-GCM',
+                        iv: ivArray,
+                        tagLength: 128
+                    },
+                    key,
+                    encryptedWithTag
+                );
+
+                return new Uint8Array(decrypted);
+            } catch (error) {
+                console.error('DecryptFileData error:', error);
+                throw error;
+            }
+        }
+
         async function loadInitialMessages(chatId, sessionKey, chatType) {
             const messages = document.querySelectorAll('.message-row');
             for (const message of messages) {
                 const messageId = message.dataset.messageId;
                 const encryptedContent = message.dataset.encryptedContent;
+                const fileData = message.dataset.fileData; // Данные файла
+                const fileName = message.dataset.fileName; // Имя файла
+                const fileSize = message.dataset.fileSize; // Размер файла
                 const iv = message.dataset.iv;
                 const tag = message.dataset.tag;
                 const senderId = message.dataset.senderId;
                 const isCurrentUser = senderId === document.body.dataset.currentUserId;
                 const isSuspicious = message.dataset.isSuspicious === 'true';
 
-                let messageText = 'Encrypted';
-                if ((chatType === 'DM' || chatType === 'GM') && encryptedContent && iv && tag) {
+                const messageBlock = message.querySelector('.message-block');
+                const messageBubble = message.querySelector('.message-bubble');
+                if (!messageBlock || !messageBubble) continue; // Пропускаем, если структура DOM некорректна
+
+                let messageContent = '';
+                if ((chatType === 'DM' || chatType === 'GM') && iv && tag) {
                     try {
-                        messageText = await decryptMessage(
-                            { content: encryptedContent, iv: iv, tag: tag },
-                            sessionKey
-                        );
-                        //console.log('Decrypted initial message:', messageText);
+                        if (fileData && fileName && fileSize) {
+                            // Если это сообщение с файлом
+                            const fileSizeMB = (parseInt(fileSize) / (1024 * 1024)).toFixed(2);
+                            messageContent = `
+                                <div class="file-message">
+                                    <i class="file-icon bi bi-file-earmark"></i>
+                                    <div class="file-info">
+                                        <div class="file-name">${fileName}</div>
+                                        <div class="file-size">${fileSizeMB} MB</div>
+                                    </div>
+                                    <a href="#" class="file-download" data-file-data="${fileData}" data-iv="${iv}" data-tag="${tag}" data-file-name="${fileName}">Скачать</a>
+                                </div>
+                            `;
+                        } else if (encryptedContent) {
+                            // Если это текстовое сообщение, расшифровываем content
+                            const messageText = await decryptMessage(
+                                { content: encryptedContent, iv: iv, tag: tag },
+                                sessionKey
+                            );
+                            messageContent = `
+                                <div class="message-text">${messageText}</div>
+                                ${isSuspicious ? `<div class="suspicious-label text-warning mt-1">Подозрительное сообщение</div>` : ''}
+                            `;
+                        } else {
+                            messageContent = `<div class="message-text">[Пустое сообщение]</div>`;
+                        }
                     } catch (e) {
-                        console.error('Failed to decrypt initial message:', e);
-                        messageText = '[Ошибка расшифровки]';
+                        console.error('Failed to decrypt initial message for message', messageId, ':', e);
+                        messageContent = `<div class="message-text">[Ошибка расшифровки]</div>`;
                     }
+                } else {
+                    messageContent = `<div class="message-text">${encryptedContent || '[Сообщение не зашифровано]'}</div>`;
                 }
-                const messageTextElement = message.querySelector('.message-text');
-                if (messageTextElement) {
-                    messageTextElement.textContent = messageText;
+
+                // Обновляем содержимое message-bubble
+                const messageUsername = messageBubble.querySelector('.message-username');
+                const messageMeta = messageBubble.querySelector('.message-meta');
+                messageBubble.innerHTML = '';
+                if (messageUsername) {
+                    messageBubble.appendChild(messageUsername); // Сохраняем имя пользователя, если есть
                 }
+                messageBubble.insertAdjacentHTML('beforeend', messageContent);
+                if (messageMeta) {
+                    messageBubble.appendChild(messageMeta); // Сохраняем метаданные (время, статус)
+                }
+
                 if (isSuspicious) {
                     message.classList.add('suspicious-message');
+                }
+
+                // Добавляем обработчик для скачивания файла
+                const downloadLink = message.querySelector('.file-download');
+                if (downloadLink) {
+                    downloadLink.addEventListener('click', async (e) => {
+                        e.preventDefault();
+                        const fileData = downloadLink.dataset.fileData;
+                        const iv = downloadLink.dataset.iv;
+                        const tag = downloadLink.dataset.tag;
+                        const fileName = downloadLink.dataset.fileName;
+
+                        try {
+                            const sessionKey = await getSessionKey(chatId);
+                            const decryptedFileData = await decryptFileData(
+                                { content: fileData, iv: iv, tag: tag },
+                                sessionKey
+                            );
+
+                            // Создаём Blob и скачиваем файл
+                            const blob = new Blob([decryptedFileData], { type: 'application/octet-stream' });
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = fileName;
+                            a.click();
+                            window.URL.revokeObjectURL(url);
+                        } catch (error) {
+                            console.error('File decryption error:', error);
+                            alert('Ошибка при расшифровке файла: ' + error.message);
+                        }
+                    });
                 }
             }
         }
@@ -999,27 +1321,41 @@ document.addEventListener('DOMContentLoaded', function() {
             const senderInitial = data.sender ? data.sender.charAt(0).toUpperCase() : 'U';
             const suspiciousClass = data.is_suspicious ? 'suspicious-message' : '';
 
+            let messageContent = '';
+            if (data.file_name && data.file_data && data.iv && data.tag) {
+                const fileSizeMB = (data.file_size / (1024 * 1024)).toFixed(2);
+                messageContent = `
+                    <div class="file-message">
+                        <i class="file-icon bi bi-file-earmark"></i>
+                        <div class="file-info">
+                            <div class="file-name">${data.file_name}</div>
+                            <div class="file-size">${fileSizeMB} MB</div>
+                        </div>
+                        <a href="#" class="file-download" data-file-data="${data.file_data}" data-iv="${data.iv}" data-tag="${data.tag}" data-file-name="${data.file_name}">Скачать</a>
+                    </div>
+                `;
+            } else {
+                messageContent = `
+                    <div class="message-text">${data.message}</div>
+                    ${data.is_suspicious ? `<div class="suspicious-label text-warning mt-1">Подозрительное сообщение</div>` : ''}
+                `;
+            }
+
             const messageElement = `
                 <div class="message-row ${messageClass} ${suspiciousClass}" data-message-id="${data.message_id}" data-sender-id="${data.sender_id}" data-is-suspicious="${data.is_suspicious}">
                     ${!isCurrentUser ? `
                     <div class="message-avatar">
-                        <div class="user-avatar">
-                            ${senderInitial}
-                        </div>
+                        <div class="user-avatar">${senderInitial}</div>
                     </div>
                     ` : ''}
 
                     <div class="message-block">
                         <div class="message-bubble">
                             ${!isCurrentUser && chatType === 'GM' ? `
-                            <div class="message-username">
-                                ${data.sender}
-                            </div>
+                            <div class="message-username">${data.sender}</div>
                             ` : ''}
 
-                            <div class="message-text">
-                                ${data.message}
-                            </div>
+                            ${messageContent}
 
                             <div class="message-meta">
                                 <span class="message-time">
@@ -1031,11 +1367,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </span>
                                 ` : ''}
                             </div>
-                            ${data.is_suspicious ? `
-                            <div class="suspicious-label text-warning mt-1">
-                                Подозрительное сообщение
-                            </div>
-                            ` : ''}
                         </div>
                     </div>
                 </div>
@@ -1043,6 +1374,42 @@ document.addEventListener('DOMContentLoaded', function() {
 
             messagesContainer.insertAdjacentHTML('beforeend', messageElement);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            // Добавляем обработчик для скачивания файла
+            const downloadLink = messagesContainer.querySelector(`.message-row[data-message-id="${data.message_id}"] .file-download`);
+            if (downloadLink) {
+                downloadLink.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    const fileData = downloadLink.dataset.fileData;
+                    const iv = downloadLink.dataset.iv;
+                    const tag = downloadLink.dataset.tag;
+                    const fileName = downloadLink.dataset.fileName;
+
+                    try {
+                        const chatHeader = document.querySelector('.chat-header');
+                        const chatId = chatHeader.dataset.chatId;
+                        const sessionKey = await getSessionKey(chatId);
+
+                        // Расшифровываем файл
+                        const decryptedFileData = await decryptFileData(
+                            { content: fileData, iv: iv, tag: tag },
+                            sessionKey
+                        );
+
+                        // Создаём Blob и скачиваем файл
+                        const blob = new Blob([decryptedFileData], { type: 'application/octet-stream' });
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = fileName;
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                    } catch (error) {
+                        console.error('File decryption error:', error);
+                        alert('Ошибка при расшифровке файла: ' + error.message);
+                    }
+                });
+            }
         }
     }
 
@@ -1414,6 +1781,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     alert('Ошибка при отправке жалобы: ' + error.message);
                 }
             });
+        }
+
+        const messageInput = document.getElementById('message-input');
+        const fileInput = document.getElementById('file-input');
+        if (messageInput && fileInput) {
+            messageInput.addEventListener('click', (e) => {
+                if (e.offsetX < 40) { // Клик в области иконки (первые 40px)
+                    e.preventDefault();
+                    fileInput.click();
+                    console.log('Triggered file input click via message input icon');
+                }
+            });
+        } else {
+            console.error('Message input or file input not found');
         }
     }
 

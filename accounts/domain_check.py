@@ -163,17 +163,3 @@ def is_suspicious_domain(domain: str) -> bool:
         return True
 
     return False
-
-
-def check_ssl_certificate(domain: str) -> bool:
-    """
-    Проверка SSL сертификата (дополнительная проверка)
-    """
-    try:
-        context = ssl.create_default_context()
-        with socket.create_connection((domain, 443)) as sock:
-            with context.wrap_socket(sock, server_hostname=domain) as ssock:
-                cert = ssock.getpeercert()
-                return bool(cert)
-    except (ssl.SSLError, socket.timeout, ConnectionError):
-        return False

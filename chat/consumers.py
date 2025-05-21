@@ -57,7 +57,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
             iv = data.get('iv')
             tag = data.get('tag')
             urls = data.get('urls', [])
-            print(f"[{time.time()}] Parsed message: type={message_type}, content={content}, iv={iv}, tag={tag}, urls={urls}")
+            file_name = data.get('file_name')
+            file_size = data.get('file_size')
+            file_data = data.get('file_data')
+            print(f"[{time.time()}] Parsed message: type={message_type}, content={content}, iv={iv}, tag={tag}, urls={urls}, file_name={file_name}")
 
             if not content:
                 await self.send_error("Сообщение не может быть пустым")
@@ -66,11 +69,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
             # Проверка черного списка
             if self.is_dm:
                 recipient = await self.get_dm_recipient()
-                # Проверка: заблокирован ли отправитель получателем
                 if await self.is_blocked_by(recipient):
                     await self.send_error("Вы заблокированы этим пользователем")
                     return
-                # Проверка: заблокировал ли отправитель получателя
                 if await self.has_blocked(recipient):
                     await self.send_error("Вы не можете отправить сообщение, так как заблокировали этого пользователя")
                     return
@@ -140,26 +141,60 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     await self.send_error(f"Ошибка проверки ссылок: {str(e)}")
                     return
 
-            # Сохранение сообщения
-            message = await self.save_message(content, iv, tag, is_suspicious)
-            print(f"[{time.time()}] Message saved: {message.id}")
+            # Сохраняем сообщение или файл
+            if file_name and file_size and file_data:
+                print(f"[{time.time()}] Saving file message: {file_name}")
+                message = await self.save_message(content, iv, tag, is_suspicious, file_name=file_name,
+                file_size=file_size, file_data=file_data)
+                message_id = str(message.id)
+            else:
+                message = await self.save_message(content, iv, tag, is_suspicious)
+                message_id = str(message.id)
 
-            # Отправка сообщения в группу
-            await self.channel_layer.group_send(
-                self.room_group_name,
-                {
-                    'type': 'chat_message',
-                    'message_id': str(message.id),
-                    'message': content,
-                    'iv': iv,
-                    'tag': tag,
-                    'sender_id': self.user.id,
-                    'sender__username': self.user.username,
-                    'timestamp': message.timestamp.isoformat(),
-                    'is_read': False,
-                    'is_suspicious': is_suspicious
-                }
-            )
+
+            if file_name and file_size and file_data:
+                print(f"[{time.time()}] Broadcasting file message: {file_name}")
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        'type': 'chat_message',
+                        'message_id': message_id,
+                        'message': content,
+                        'iv': iv,
+                        'tag': tag,
+                        'sender_id': self.user.id,
+                        'sender__username': self.user.username,
+                        'timestamp': timezone.now().isoformat(),
+                        'is_read': False,
+                        'is_suspicious': is_suspicious,
+                        'file_name': file_name,
+                        'file_size': int(file_size),
+                        'file_data': file_data
+                    }
+                )
+            else:
+                # Обычное текстовое сообщение — сохраняем в базе
+                message = await self.save_message(content, iv, tag, is_suspicious)
+                print(f"[{time.time()}] Message saved: {message.id}")
+
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        'type': 'chat_message',
+                        'message_id': str(message.id),
+                        'message': content,
+                        'iv': iv,
+                        'tag': tag,
+                        'sender_id': self.user.id,
+                        'sender__username': self.user.username,
+                        'timestamp': message.timestamp.isoformat(),
+                        'is_read': False,
+                        'is_suspicious': is_suspicious,
+                        'file_name': None,
+                        'file_size': None,
+                        'file_data': None
+                    }
+                )
             print(f"[{time.time()}] Message sent to group: {self.room_group_name}")
 
         except json.JSONDecodeError:
@@ -180,7 +215,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'sender': event['sender__username'],
             'timestamp': event['timestamp'],
             'is_read': event['is_read'],
-            'is_suspicious': event['is_suspicious']
+            'is_suspicious': event['is_suspicious'],
+            'file_name': event.get('file_name'),
+            'file_size': event.get('file_size'),
+            'file_data': event.get('file_data'),
+            'file_iv': event.get('file_iv'),
+            'file_tag': event.get('file_tag')
         }))
 
     async def send_error(self, error_message):
@@ -288,13 +328,18 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     'sender__username': message.sender.username,
                     'timestamp': message.timestamp.isoformat(),
                     'is_read': message.is_read,
-                    'is_suspicious': message.is_suspicious
+                    'is_suspicious': message.is_suspicious,
+                    'file_name': message.file_name,
+                    'file_size': message.file_size,
+                    'file_data': message.file_data,
+                    'file_iv': message.iv,
+                    'file_tag': message.tag
                 } for message in messages
             ]
         }))
 
     @database_sync_to_async
-    def save_message(self, content, iv, tag, is_suspicious):
+    def save_message(self, content, iv, tag, is_suspicious, file_name=None, file_size=None, file_data=None):
         room = ChatRoom.objects.get(id=self.room_id)
         return Message.objects.create(
             room=room,
@@ -302,7 +347,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
             content=content,
             iv=iv,
             tag=tag,
-            is_suspicious=is_suspicious
+            is_suspicious=is_suspicious,
+            file_name=file_name,
+            file_size=file_size,
+            file_data=file_data,
+            timestamp=timezone.now()
         )
 
     @database_sync_to_async

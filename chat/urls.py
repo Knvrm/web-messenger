@@ -19,4 +19,7 @@ urlpatterns = [
     path('settings/blacklist/remove/', views.remove_from_blacklist, name='remove-from-blacklist'),
     path('get-user-status/<int:user_id>/', views.get_user_status, name='get-user-status'),
     path('settings/update-privacy/', views.update_privacy, name='update-privacy'),
+    path('upload-file/', views.upload_file, name='upload_file'),
+    path('check-file-hash/', views.check_file_hash, name='check_file_hash'),
+    path('upload-and-check-file/', views.upload_and_check_file, name='upload_and_check_file'),
 ]

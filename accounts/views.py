@@ -206,7 +206,6 @@ def login_view(request):
             auth_code = generate_confirmation_code()
             request.session['auth_user_id'] = user.id
             request.session['auth_code'] = auth_code
-            request.session.set_expiry(300)
             send_mail(
                 'Код подтверждения входа',
                 f'Никому не сообщайте данный код.\nВаш код подтверждения: {auth_code}\nЕго спрашивают ТОЛЬКО мошенники.',

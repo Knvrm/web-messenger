@@ -49,6 +49,9 @@
                    <a href="?chat_id={{ chat.id }}"
                       class="chat-item {% if selected_chat.id == chat.id %}active{% endif %}"
                       data-encrypted-content="{{ chat.messages.last.content|escape }}"
+                      {% if chat.last_message.file_data %}
+                        data-file-data="{{ chat.last_message.file_data|safe }}"
+                      {% endif %}
                       data-iv="{{ chat.messages.last.iv|escape }}"
                       data-tag="{{ chat.messages.last.tag|escape }}"
                       data-chat-type="{{ chat.type }}">
@@ -238,6 +241,11 @@
                         data-encrypted-content="{{ message.content|escape }}"
                         data-iv="{{ message.iv|escape }}"
                         data-tag="{{ message.tag|escape }}"
+                        {% if message.file_data %}
+                            data-file-data="{{ message.file_data|safe }}"
+                            data-file-name="{{ message.file_name|safe }}"
+                            data-file-size="{{ message.file_size }}"
+                        {% endif %}
                         data-sender-id="{{ message.sender.id }}"
                         data-is-suspicious="{{ message.is_suspicious|yesno:'true,false' }}">
                        {% if message.sender != request.user %}
@@ -275,12 +283,13 @@
                    {% endfor %}
                </div>
                <div class="message-input">
-                   <form id="message-form">
-                       {% csrf_token %}
-                       <input type="text" name="message" id="message-input" autocomplete="off" placeholder="Введите сообщение..." required>
-                       <button type="submit">Отправить</button>
-                   </form>
-               </div>
+                    <form id="message-form">
+                        <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+                        <input type="text" id="message-input" placeholder="Сообщение..." autocomplete="off" class="with-attach-icon">
+                        <button type="submit">Отправить</button>
+                    </form>
+                    <input type="file" id="file-input" accept=".pdf,.docx,.xlsx,.png,.jpg,.zip,.txt" style="display: none;">
+                </div>
                {% else %}
                <div class="chat-placeholder">
                    <div class="placeholder-content">

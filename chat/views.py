@@ -1,13 +1,19 @@
+import base64
 from datetime import timedelta
+
+import requests
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
+
+from messenger import settings
+from .link import is_malicious_file_virustotal, is_malicious_file
 from .models import ChatRoom, Message, SecurityLog
 from django.contrib.auth import get_user_model
 import json
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET, require_POST
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 from django.db.models import Prefetch
 from transformers import DistilBertTokenizer
 import onnxruntime as ort
@@ -488,3 +494,93 @@ def get_user_status(request, user_id):
             'status': 'error',
             'message': str(e)
         }, status=500)
+
+
+@login_required
+@csrf_exempt
+def upload_file(request):
+    if request.method == 'POST':
+        file_data = request.POST.get('file_data')
+        iv = request.POST.get('iv')
+        tag = request.POST.get('tag')
+        file_name = request.POST.get('file_name')
+        file_size = request.POST.get('file_size')
+        chat_id = request.POST.get('chat_id')
+
+        if not (file_data and iv and tag and file_name and file_size and chat_id):
+            return JsonResponse({'status': 'error', 'message': 'Отсутствуют необходимые данные'}, status=400)
+
+        # Проверка ограничений пользователя
+        one_hour_ago = timezone.now() - timedelta(hours=1)
+        malicious_count = SecurityLog.objects.filter(
+            user=request.user,
+            checked_at__gte=one_hour_ago,
+            is_malicious=True
+        ).count()
+        if malicious_count >= 3:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Вы временно ограничены в отправке сообщений',
+                'details': {'reason': 'Превышен лимит подозрительных действий'}
+            }, status=403)
+
+        try:
+            chat = ChatRoom.objects.get(id=chat_id, participants=request.user)
+            # Сохраняем сообщение с уже зашифрованным файлом
+            message = Message.objects.create(
+                room=chat,
+                sender=request.user,
+                content=f"File: {file_name}",
+                file_data=file_data,
+                file_name=file_name,
+                file_size=int(file_size),
+                iv=iv,
+                tag=tag
+            )
+            return JsonResponse({'status': 'success', 'message_id': message.id})
+        except ChatRoom.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': 'Чат не найден'}, status=404)
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    return JsonResponse({'status': 'error', 'message': 'Метод не поддерживается'}, status=405)
+
+VIRUSTOTAL_FILE_API = "https://www.virustotal.com/api/v3/files"
+
+@csrf_exempt
+@require_POST
+def check_file_hash(request):
+    try:
+        data = json.loads(request.body)
+        file_hash = data.get('hash')
+        if not file_hash:
+            return JsonResponse({'error': 'Hash not provided'}, status=400)
+
+        # Проверяем только через VirusTotal, так как ClamAV требует сам файл
+        headers = {"x-apikey": settings.VIRUSTOTAL_API_KEY}
+        hash_check_url = f"{VIRUSTOTAL_FILE_API}/{file_hash}"
+        response = requests.get(hash_check_url, headers=headers, timeout=5)
+
+        if response.status_code == 200:
+            stats = response.json().get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
+            is_malicious = stats.get('malicious', 0) > 0
+            return JsonResponse({'is_malicious': True})
+        else:
+            return JsonResponse({'is_malicious': False, 'needs_upload': True})
+    except Exception as e:
+        print(f"Error checking file hash: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_POST
+def upload_and_check_file(request):
+    try:
+        file = request.FILES.get('file')
+        if not file:
+            return JsonResponse({'error': 'File not provided'}, status=400)
+
+        file_data = file.read()
+        is_malicious = is_malicious_file(file_data)  # Комбинированная проверка
+        return JsonResponse({'is_malicious': is_malicious})
+    except Exception as e:
+        print(f"Error uploading file to VirusTotal/ClamAV: {e}")
+        return JsonResponse({'error': str(e)}, status=500)

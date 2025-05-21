@@ -31,6 +31,9 @@ class Message(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     is_read = models.BooleanField(default=False)
     is_suspicious = models.BooleanField(default=False)  # Новый флаг для подозрительных сообщений
+    file_data = models.TextField(blank=True, null=True)  # Для base64 данных файла
+    file_name = models.CharField(max_length=255, blank=True, null=True)
+    file_size = models.BigIntegerField(blank=True, null=True)
 
     class Meta:
         ordering = ['timestamp']
